@@ -1,0 +1,39 @@
+# Example MAC Blacklist for hcxdumptool-launcher
+# MACs to exclude from capture
+# Useful for avoiding specific networks during testing
+# Format: XX:XX:XX:XX:XX:XX (one per line)
+
+# === Neighbor Networks (DO NOT TEST) ===
+# Residential networks near test site
+98:76:54:32:10:FE
+AB:CD:EF:12:34:56
+11:11:11:11:11:11
+22:22:22:22:22:22
+
+# === Infrastructure Devices ===
+# Critical infrastructure to avoid
+FF:FF:FF:FF:FF:FF  # Broadcast
+00:00:00:00:00:00  # Null MAC
+01:00:5E:00:00:00  # IPv4 Multicast range start
+33:33:00:00:00:00  # IPv6 Multicast range start
+
+# === Known Honeypots/Traps ===
+# Devices that may be monitoring for attacks
+DE:AD:DE:AD:DE:AD
+BE:EF:BE:EF:BE:EF
+00:DE:AD:BE:EF:00
+
+# === Out of Scope Networks ===
+# Networks explicitly excluded from testing
+AA:AA:AA:AA:AA:AA
+BB:BB:BB:BB:BB:BB
+
+# === Your Own Devices ===
+# Prevent capturing your own management traffic
+# Add your phone/laptop MACs here
+
+# Tips:
+# - Update before each engagement
+# - Include critical infrastructure
+# - Add honeypot MAC addresses if known
+# - Regularly review and clean this list

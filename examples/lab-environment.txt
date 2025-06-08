@@ -1,0 +1,51 @@
+# WiFi Security Lab Environment
+# MAC addresses for controlled testing environment
+# These are example MACs for lab equipment
+#
+# Usage: hcxdumptool-launcher -f lab-environment.txt -m whitelist
+
+# === TEST ACCESS POINTS ===
+# Vulnerable test routers
+DE:AD:BE:EF:00:01  # TestAP-WPA2-Weak
+DE:AD:BE:EF:00:02  # TestAP-WPS-Enabled
+DE:AD:BE:EF:00:03  # TestAP-WPA3-SAE
+DE:AD:BE:EF:00:04  # TestAP-Open
+DE:AD:BE:EF:00:05  # TestAP-Enterprise
+
+# Lab infrastructure
+CA:FE:BA:BE:00:01  # Lab-Router-Main
+CA:FE:BA:BE:00:02  # Lab-Router-Guest
+CA:FE:BA:BE:00:03  # Lab-Router-IoT
+
+# === TEST CLIENT DEVICES ===
+# Attack platforms
+13:37:13:37:00:01  # Kali-Laptop-1
+13:37:13:37:00:02  # Kali-Laptop-2
+13:37:13:37:00:03  # ParrotOS-VM
+
+# Test clients
+TE:5T:CL:13:37:01  # Test-Android-Phone
+TE:5T:CL:13:37:02  # Test-iPhone
+TE:5T:CL:13:37:03  # Test-Windows-Laptop
+TE:5T:CL:13:37:04  # Test-MacBook
+TE:5T:CL:13:37:05  # Test-Linux-Laptop
+
+# IoT test devices
+10:7D:EV:1C:E0:01  # Test-SmartTV
+10:7D:EV:1C:E0:02  # Test-IPCamera
+10:7D:EV:1C:E0:03  # Test-SmartPlug
+10:7D:EV:1C:E0:04  # Test-Thermostat
+
+# === ISOLATED TEST NETWORK ===
+# These should never appear in production
+FF:FF:00:00:00:01  # Isolated-AP-1
+FF:FF:00:00:00:02  # Isolated-AP-2
+FF:FF:00:00:00:03  # Isolated-Client-1
+FF:FF:00:00:00:04  # Isolated-Client-2
+
+# === NOTES ===
+# - Update with your actual lab MAC addresses
+# - Use private MAC ranges for testing
+# - Document each device for reference
+# - Keep this file in secure location
+# - Never use in production networks

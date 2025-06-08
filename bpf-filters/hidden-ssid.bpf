@@ -1,0 +1,28 @@
+# Hidden SSID Detection Berkeley Packet Filter
+# Captures beacons with null/empty SSID fields
+# Useful for discovering hidden networks
+# This filter looks for beacon frames with SSID length of 0
+#
+# Usage: hcxdumptool-launcher -b /etc/hcxtools/bpf-filters/hidden-ssid.bpf
+
+20
+0 0 0 12
+21 0 18 2048
+48 0 0 23
+21 0 16 1
+21 14 0 2048
+48 0 0 23
+84 0 0 240
+21 0 12 128
+40 0 0 2
+12 0 0 0
+7 0 0 0
+96 0 0 8
+21 0 7 0
+40 0 0 36
+69 5 0 8191
+177 0 0 0
+80 0 0 1
+21 0 1 0
+6 0 0 65535
+6 0 0 0

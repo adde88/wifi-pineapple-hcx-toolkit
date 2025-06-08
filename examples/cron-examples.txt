@@ -1,0 +1,74 @@
+# Cron Examples for Automated WiFi Captures
+# Add these to your crontab with: crontab -e
+#
+# Format: minute hour day month weekday command
+# Use: hcxdumptool-launcher (if installed) or full path
+
+# === BASIC SCHEDULES ===
+
+# Every hour, 5-minute capture
+0 * * * * /usr/bin/hcxdumptool-launcher -d 300 -q
+
+# Every 4 hours, 30-minute capture
+0 */4 * * * /usr/bin/hcxdumptool-launcher -d 1800 -q
+
+# Daily at 2 AM, 1-hour capture
+0 2 * * * /usr/bin/hcxdumptool-launcher -d 3600 -q
+
+# === BUSINESS HOURS ===
+
+# Weekdays, every 2 hours during business hours (8 AM - 6 PM)
+0 8,10,12,14,16,18 * * 1-5 /usr/bin/hcxdumptool-launcher -d 1800 -q
+
+# Lunch time capture (12 PM - 1 PM on weekdays)
+0 12 * * 1-5 /usr/bin/hcxdumptool-launcher -d 3600 -q
+
+# === OFF-HOURS / STEALTH ===
+
+# Overnight capture (11 PM - 5 AM)
+0 23 * * * /usr/bin/hcxdumptool-launcher -d 21600 -q --rotate-size 500
+
+# Weekend extended capture (Friday 10 PM - Monday 6 AM)
+0 22 * * 5 /usr/bin/hcxdumptool-launcher -d 216000 -q --rotate-size 1000
+
+# Early morning stealth (4 AM - 6 AM daily)
+0 4 * * * /usr/bin/hcxdumptool-launcher -d 7200 -q -a client
+
+# === TARGETED CAPTURES ===
+
+# Specific channel during peak hours
+0 9,13,17 * * * /usr/bin/hcxdumptool-launcher -c 6 -d 1800 -q
+
+# 5GHz only capture (evening)
+0 19 * * * /usr/bin/hcxdumptool-launcher -c 36,40,44,48,149,153,157,161 -d 3600 -q
+
+# Target specific APs (with whitelist)
+30 * * * * /usr/bin/hcxdumptool-launcher -f /etc/hcxtools/targets.txt -m whitelist -d 1200 -q
+
+# === ADVANCED SCHEDULES ===
+
+# Rotate captures every 6 hours with analysis
+0 */6 * * * /usr/bin/hcxdumptool-launcher -d 3600 -q && /root/post-capture-analysis.sh
+
+# Different interfaces at different times
+0 8 * * * /usr/bin/hcxdumptool-launcher -i wlan0 -d 3600 -q
+0 20 * * * /usr/bin/hcxdumptool-launcher -i wlan2 -d 3600 -q
+
+# Conditional capture (only if interface is available)
+*/30 * * * * [ -d /sys/class/net/wlan2 ] && /usr/bin/hcxdumptool-launcher -i wlan2 -d 1200 -q
+
+# === MAINTENANCE ===
+
+# Weekly cleanup of old captures (Sunday 3 AM)
+0 3 * * 0 find /root/hcxdumps -name "*.pcapng" -mtime +30 -delete
+
+# Daily compression of yesterday's captures
+0 1 * * * find /root/hcxdumps -name "*$(date -d yesterday +%Y%m%d)*.pcapng" -exec gzip {} \;
+
+# === TIPS ===
+# - Use -q (quiet) flag for cron jobs to reduce log spam
+# - Use --rotate-size for long captures to manage file sizes
+# - Test your cron syntax: crontab -l (list) and crontab -e (edit)
+# - Check cron logs: logread | grep cron (OpenWRT)
+# - Ensure full paths are used in cron commands
+# - Consider system load and storage when scheduling

@@ -1,0 +1,123 @@
+# Mobile Hotspot MAC Filter List
+# Common MAC address prefixes for mobile hotspots
+# Use this to exclude mobile devices from captures
+#
+# Usage: hcxdumptool-launcher -f mobile-hotspot-filter.txt -m blacklist
+#
+# Note: Mobile devices often randomize MACs, so this isn't 100% effective
+# Format: XX:XX:XX:XX:XX:XX (one per line)
+
+# === iPhone Personal Hotspots ===
+# Apple iPhone (various models)
+# These often start with specific Apple OUIs when in hotspot mode
+92:6B:3E:XX:XX:XX
+96:C4:F7:XX:XX:XX
+9A:FC:4E:XX:XX:XX
+9E:B6:D0:XX:XX:XX
+A2:18:0A:XX:XX:XX
+A6:5E:60:XX:XX:XX
+AA:6B:AD:XX:XX:XX
+AE:BE:12:XX:XX:XX
+
+# === Android Hotspots ===
+# Samsung devices
+02:1A:11:XX:XX:XX
+02:26:B0:XX:XX:XX
+02:5A:BE:XX:XX:XX
+02:C8:85:XX:XX:XX
+06:26:B0:XX:XX:XX
+0A:26:B0:XX:XX:XX
+
+# Google Pixel
+3A:8B:FA:XX:XX:XX
+3E:8B:FA:XX:XX:XX
+42:8B:FA:XX:XX:XX
+
+# OnePlus
+12:34:56:XX:XX:XX
+16:34:56:XX:XX:XX
+1A:34:56:XX:XX:XX
+
+# Xiaomi/Redmi
+22:22:FF:XX:XX:XX
+26:22:FF:XX:XX:XX
+2A:22:FF:XX:XX:XX
+
+# === Carrier-Specific Hotspots ===
+# Verizon MiFi devices
+00:15:FF:XX:XX:XX
+20:3D:BD:XX:XX:XX
+8C:4D:EA:XX:XX:XX
+
+# AT&T Mobile Hotspots
+00:26:B6:XX:XX:XX
+24:26:B6:XX:XX:XX
+48:26:B6:XX:XX:XX
+
+# T-Mobile Hotspots
+00:1F:28:XX:XX:XX
+00:50:AE:XX:XX:XX
+54:77:C6:XX:XX:XX
+
+# Sprint/Boost Mobile
+00:1F:FB:XX:XX:XX
+C0:C5:20:XX:XX:XX
+
+# === Portable Hotspot Devices ===
+# Huawei Mobile WiFi
+00:1E:10:XX:XX:XX
+08:63:61:XX:XX:XX
+48:5D:36:XX:XX:XX
+88:44:77:XX:XX:XX
+
+# ZTE Mobile Hotspots
+00:1C:25:XX:XX:XX
+34:E0:CF:XX:XX:XX
+9C:D2:4B:XX:XX:XX
+
+# Netgear AirCard
+20:9B:A5:XX:XX:XX
+6C:B0:CE:XX:XX:XX
+
+# TP-Link M7350
+64:6E:69:XX:XX:XX
+AC:84:C6:XX:XX:XX
+
+# === Vehicle Hotspots ===
+# Tesla vehicles
+4C:FC:AA:XX:XX:XX
+98:ED:5C:XX:XX:XX
+
+# GM OnStar
+00:1F:A7:XX:XX:XX
+48:5A:B6:XX:XX:XX
+
+# Ford SYNC
+00:1E:B2:XX:XX:XX
+94:B8:6D:XX:XX:XX
+
+# === Common Hotspot SSIDs to look for ===
+# These aren't MACs but common patterns:
+# - "iPhone"
+# - "AndroidAP"
+# - "Mobile Hotspot"
+# - "Verizon-MiFi"
+# - "[Name]'s iPhone"
+# - "Galaxy S" followed by model
+
+# === Random MAC Indicators ===
+# Locally administered addresses (2nd hex digit = 2,6,A,E)
+02:XX:XX:XX:XX:XX
+06:XX:XX:XX:XX:XX
+0A:XX:XX:XX:XX:XX
+0E:XX:XX:XX:XX:XX
+
+# === Notes ===
+# 1. Many mobile devices use random MACs for privacy
+# 2. This list is not exhaustive - new devices appear regularly
+# 3. Some legitimate APs may use these OUIs
+# 4. Consider combining with ESSID filtering for better accuracy
+# 5. Update regularly as new devices are released
+
+# To use with whitelist instead (capture ONLY mobile hotspots):
+# hcxdumptool-launcher -f mobile-hotspot-filter.txt -m whitelist

@@ -1,0 +1,22 @@
+# Beacon Frames Berkeley Packet Filter for hcxdumptool
+# Captures only beacon frames for AP discovery
+# Minimal capture size, perfect for reconnaissance
+# Generated with: tcpdump -dd 'type mgt subtype beacon'
+#
+# This filter captures:
+# - Beacon frames (subtype 0x80)
+# - Reveals all broadcasting APs with capabilities
+#
+# Usage: hcxdumptool-launcher -b beacon-frames.bpf
+
+10
+0 0 0 12
+21 0 8 2048
+48 0 0 23
+21 0 6 1
+21 4 0 2048
+48 0 0 23
+84 0 0 240
+21 0 2 128
+6 0 0 65535
+6 0 0 0

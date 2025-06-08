@@ -1,0 +1,38 @@
+# 5GHz-only Berkeley Packet Filter for hcxdumptool
+# Captures only 5GHz band traffic (channels 36-165)
+# Useful for targeting modern dual-band networks
+# Reduces 2.4GHz IoT device noise
+#
+# This filter checks radiotap channel frequency headers
+# for 5GHz frequencies (5180-5825 MHz)
+#
+# Usage: hcxdumptool-launcher -b 5ghz-only.bpf
+
+26
+0 0 0 12
+21 0 24 2048
+48 0 0 23
+21 0 22 1
+21 20 0 2048
+40 0 0 2
+12 0 0 0
+7 0 0 0
+96 0 0 8
+21 0 16 0
+40 0 0 26
+12 0 0 0
+34 0 0 18
+21 0 12 0
+40 0 0 10
+69 10 0 65535
+177 0 0 14
+80 0 0 0
+21 7 0 5180
+80 0 0 0
+21 5 0 5200
+80 0 0 0
+21 3 0 5220
+80 0 0 0
+21 1 0 5745
+6 0 0 65535
+6 0 0 0

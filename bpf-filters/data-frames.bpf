@@ -1,0 +1,18 @@
+# Data Frames Berkeley Packet Filter
+# Captures only data frames (excludes management and control)
+# Useful for focusing on actual data traffic
+# Generated with: tcpdump -dd 'type data'
+#
+# Usage: hcxdumptool-launcher -b /etc/hcxtools/bpf-filters/data-frames.bpf
+
+10
+0 0 0 12
+21 0 8 2048
+48 0 0 23
+21 0 6 1
+21 4 0 2048
+48 0 0 23
+84 0 0 240
+21 0 2 8
+6 0 0 65535
+6 0 0 0

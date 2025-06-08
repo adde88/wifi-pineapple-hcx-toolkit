@@ -1,0 +1,26 @@
+# Open/Unencrypted Networks Berkeley Packet Filter
+# Captures beacon frames from open (unencrypted) networks
+# Useful for identifying insecure access points
+# Checks for absence of privacy bit in capability info
+#
+# Usage: hcxdumptool-launcher -b /etc/hcxtools/bpf-filters/open-networks.bpf
+
+18
+0 0 0 12
+21 0 16 2048
+48 0 0 23
+21 0 14 1
+21 12 0 2048
+48 0 0 23
+84 0 0 240
+21 0 10 128
+40 0 0 2
+12 0 0 0
+7 0 0 0
+96 0 0 8
+21 0 5 0
+40 0 0 34
+84 0 0 16
+21 1 0 0
+6 0 0 65535
+6 0 0 0

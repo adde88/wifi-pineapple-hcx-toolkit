@@ -1,0 +1,252 @@
+# Extended Corporate/Enterprise Access Point OUIs
+# Comprehensive list of enterprise-grade AP manufacturers
+# Useful for targeting corporate networks during authorized assessments
+# Format: First 3 octets (OUI) followed by XX:XX:XX
+#
+# Usage: Complete with actual MAC addresses and use with:
+# hcxdumptool-launcher -f corporate-ouis.txt -m whitelist
+
+# === Cisco Systems (Multiple Product Lines) ===
+# Cisco Aironet Series
+00:0B:85:XX:XX:XX
+00:0C:41:XX:XX:XX
+00:0D:BD:XX:XX:XX
+00:0E:D7:XX:XX:XX
+00:0F:F7:XX:XX:XX
+00:12:D9:XX:XX:XX
+00:13:1A:XX:XX:XX
+00:14:69:XX:XX:XX
+00:15:2B:XX:XX:XX
+00:16:46:XX:XX:XX
+00:17:94:XX:XX:XX
+00:18:73:XX:XX:XX
+00:19:55:XX:XX:XX
+00:1A:2F:XX:XX:XX
+00:1A:6C:XX:XX:XX
+00:1A:A1:XX:XX:XX
+00:1B:D4:XX:XX:XX
+00:1C:F9:XX:XX:XX
+00:1D:45:XX:XX:XX
+00:1E:14:XX:XX:XX
+00:1E:F7:XX:XX:XX
+00:1F:9D:XX:XX:XX
+00:21:55:XX:XX:XX
+00:22:BD:XX:XX:XX
+00:23:04:XX:XX:XX
+00:23:5D:XX:XX:XX
+00:24:97:XX:XX:XX
+00:25:45:XX:XX:XX
+00:26:0A:XX:XX:XX
+40:55:39:XX:XX:XX
+58:0A:20:XX:XX:XX
+64:00:F1:XX:XX:XX
+68:7F:74:XX:XX:XX
+70:10:5C:XX:XX:XX
+88:5A:92:XX:XX:XX
+E8:B0:C8:XX:XX:XX
+F4:1F:C2:XX:XX:XX
+
+# Cisco Meraki
+00:0C:E7:XX:XX:XX
+00:18:0A:XX:XX:XX
+88:15:44:XX:XX:XX
+AC:17:C8:XX:XX:XX
+E0:CB:BC:XX:XX:XX
+E0:55:3D:XX:XX:XX
+FC:99:47:XX:XX:XX
+
+# === Aruba Networks (HPE) ===
+00:0B:86:XX:XX:XX
+00:1A:1E:XX:XX:XX
+00:24:6C:XX:XX:XX
+18:64:72:XX:XX:XX
+20:4C:03:XX:XX:XX
+24:DE:C6:XX:XX:XX
+40:E3:D6:XX:XX:XX
+6C:F3:7F:XX:XX:XX
+70:3A:0E:XX:XX:XX
+84:D4:7E:XX:XX:XX
+94:B4:0F:XX:XX:XX
+9C:1C:12:XX:XX:XX
+A8:BD:27:XX:XX:XX
+AC:A3:1E:XX:XX:XX
+B4:5D:50:XX:XX:XX
+D8:C7:C8:XX:XX:XX
+F0:5C:19:XX:XX:XX
+
+# === Ruckus Wireless (CommScope) ===
+00:0C:E6:XX:XX:XX
+00:1D:2E:XX:XX:XX
+00:1F:7E:XX:XX:XX
+00:24:82:XX:XX:XX
+00:25:C4:XX:XX:XX
+24:79:F3:XX:XX:XX
+2C:C5:D3:XX:XX:XX
+54:3D:37:XX:XX:XX
+58:93:96:XX:XX:XX
+5C:E2:8C:XX:XX:XX
+8C:0C:90:XX:XX:XX
+94:F6:65:XX:XX:XX
+C4:01:7C:XX:XX:XX
+EC:8C:A2:XX:XX:XX
+F0:B0:52:XX:XX:XX
+
+# === Extreme Networks (formerly Aerohive) ===
+00:19:77:XX:XX:XX
+08:EA:40:XX:XX:XX
+40:5B:D8:XX:XX:XX
+5C:0E:8B:XX:XX:XX
+74:67:F7:XX:XX:XX
+80:A9:97:XX:XX:XX
+BC:9F:E4:XX:XX:XX
+E0:1C:41:XX:XX:XX
+
+# === Juniper Networks (Mist) ===
+00:1B:C5:XX:XX:XX
+2C:21:31:XX:XX:XX
+44:61:32:XX:XX:XX
+5C:5E:AB:XX:XX:XX
+78:19:F7:XX:XX:XX
+AC:4A:67:XX:XX:XX
+F4:CC:55:XX:XX:XX
+
+# === Fortinet FortiAP ===
+00:09:0F:XX:XX:XX
+00:15:A8:XX:XX:XX
+00:1F:A8:XX:XX:XX
+08:5B:0E:XX:XX:XX
+24:84:03:XX:XX:XX
+40:B5:64:XX:XX:XX
+70:4C:A5:XX:XX:XX
+90:6C:AC:XX:XX:XX
+D4:76:A0:XX:XX:XX
+FC:AD:0F:XX:XX:XX
+
+# === Motorola Solutions (Zebra) ===
+00:0A:0F:XX:XX:XX
+00:0C:E5:XX:XX:XX
+00:15:70:XX:XX:XX
+00:1C:C1:XX:XX:XX
+00:23:68:XX:XX:XX
+00:25:F1:XX:XX:XX
+40:4D:8E:XX:XX:XX
+74:B6:2E:XX:XX:XX
+AC:DE:48:XX:XX:XX
+
+# === Allied Telesis ===
+00:00:CD:XX:XX:XX
+00:10:7A:XX:XX:XX
+00:12:5F:XX:XX:XX
+00:13:D8:XX:XX:XX
+00:30:84:XX:XX:XX
+00:60:D0:XX:XX:XX
+
+# === Cambium Networks ===
+00:04:56:XX:XX:XX
+04:C5:A4:XX:XX:XX
+2C:B2:5D:XX:XX:XX
+58:C1:7A:XX:XX:XX
+7C:8B:CA:XX:XX:XX
+DC:9F:A4:XX:XX:XX
+
+# === Meru Networks (Fortinet) ===
+00:0C:E6:XX:XX:XX
+00:18:64:XX:XX:XX
+00:1F:7C:XX:XX:XX
+00:22:A1:XX:XX:XX
+00:24:C4:XX:XX:XX
+
+# === Peplink/Pepwave ===
+00:1A:EE:XX:XX:XX
+1C:9E:46:XX:XX:XX
+38:E3:C5:XX:XX:XX
+5C:E9:1E:XX:XX:XX
+78:6E:E7:XX:XX:XX
+
+# === Xirrus ===
+00:16:B9:XX:XX:XX
+00:1F:7C:XX:XX:XX
+00:22:A1:XX:XX:XX
+00:24:C4:XX:XX:XX
+
+# === Alcatel-Lucent Enterprise ===
+00:08:5D:XX:XX:XX
+00:80:9F:XX:XX:XX
+00:C0:8B:XX:XX:XX
+00:D0:95:XX:XX:XX
+00:E0:B1:XX:XX:XX
+00:E0:DA:XX:XX:XX
+
+# === Brocade (Ruckus) ===
+00:05:33:XX:XX:XX
+00:0D:B4:XX:XX:XX
+00:10:18:XX:XX:XX
+00:1B:ED:XX:XX:XX
+00:24:38:XX:XX:XX
+00:27:F8:XX:XX:XX
+74:8E:F8:XX:XX:XX
+
+# === Proxim Wireless ===
+00:20:A6:XX:XX:XX
+00:60:B3:XX:XX:XX
+00:90:C5:XX:XX:XX
+
+# === Riverbed (Xirrus) ===
+00:16:B9:XX:XX:XX
+00:1F:7C:XX:XX:XX
+00:24:C4:XX:XX:XX
+5C:E3:0E:XX:XX:XX
+
+# === SonicWall SonicPoint ===
+00:06:B1:XX:XX:XX
+00:17:C5:XX:XX:XX
+00:1D:EB:XX:XX:XX
+00:CB:51:XX:XX:XX
+C0:EA:E4:XX:XX:XX
+D0:00:0D:XX:XX:XX
+
+# === Trapeze Networks (Juniper) ===
+00:0B:0E:XX:XX:XX
+00:0C:E6:XX:XX:XX
+00:14:D8:XX:XX:XX
+00:1B:2F:XX:XX:XX
+00:21:D8:XX:XX:XX
+00:24:82:XX:XX:XX
+
+# === Mojo Networks (Arista) ===
+00:0C:E6:XX:XX:XX
+00:15:6D:XX:XX:XX
+00:1B:8F:XX:XX:XX
+00:24:A4:XX:XX:XX
+5C:A4:8A:XX:XX:XX
+
+# === Lancom Systems ===
+00:A0:57:XX:XX:XX
+00:1C:4D:XX:XX:XX
+C0:A0:BB:XX:XX:XX
+
+# === Enterasys Networks (Extreme) ===
+00:00:1D:XX:XX:XX
+00:01:F4:XX:XX:XX
+00:0C:2A:XX:XX:XX
+00:11:88:XX:XX:XX
+00:1B:25:XX:XX:XX
+00:1F:45:XX:XX:XX
+20:B3:99:XX:XX:XX
+D4:95:08:XX:XX:XX
+
+# === Notes ===
+# 1. This list includes major enterprise WiFi vendors
+# 2. Some companies have been acquired/merged (noted in parentheses)
+# 3. OUIs can be recycled or reassigned
+# 4. Always verify current OUI assignments
+# 5. Some vendors use multiple OUI ranges
+# 6. Check IEEE OUI database for updates: http://standards-oui.ieee.org/
+# 7. Complete XX:XX:XX with actual device addresses
+
+# === Usage Tips ===
+# - For corporate penetration tests, create a custom list from reconnaissance
+# - Combine with ESSID filtering for better accuracy
+# - Some enterprises use consumer-grade APs (check other lists)
+# - Consider time-based filtering (business hours)
+# - Cross-reference with signal strength for proximity

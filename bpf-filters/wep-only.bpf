@@ -1,0 +1,33 @@
+# WEP Protected Networks Berkeley Packet Filter
+# Captures traffic from WEP-protected networks
+# Useful for identifying legacy insecure networks
+# Looks for privacy bit set but no RSN/WPA information elements
+#
+# Usage: hcxdumptool-launcher -b /etc/hcxtools/bpf-filters/wep-only.bpf
+
+25
+0 0 0 12
+21 0 23 2048
+48 0 0 23
+21 0 21 1
+21 19 0 2048
+48 0 0 23
+84 0 0 240
+21 0 17 128
+40 0 0 2
+12 0 0 0
+7 0 0 0
+96 0 0 8
+21 0 12 0
+40 0 0 34
+84 0 0 16
+21 0 10 16
+40 0 0 36
+69 8 0 8191
+177 0 0 0
+80 0 0 0
+21 5 0 221
+80 0 0 0
+21 3 0 48
+6 0 0 0
+6 0 0 65535

@@ -1,0 +1,42 @@
+# No Broadcast/Multicast Berkeley Packet Filter for hcxdumptool
+# Excludes broadcast and multicast traffic
+# Focuses on directed frames only
+# Reduces noise in high-traffic environments
+#
+# This filter excludes:
+# - Broadcast (FF:FF:FF:FF:FF:FF)
+# - IPv4 multicast (01:00:5E:xx:xx:xx)
+# - IPv6 multicast (33:33:xx:xx:xx:xx)
+#
+# Usage: hcxdumptool-launcher -b no-broadcast.bpf
+
+28
+0 0 0 12
+21 0 26 2048
+48 0 0 23
+21 0 24 1
+48 0 0 54
+21 22 0 65535
+48 0 0 55
+21 20 0 65535
+48 0 0 56
+21 18 0 65535
+48 0 0 57
+21 16 0 65535
+48 0 0 58
+21 14 0 65535
+48 0 0 59
+21 12 0 65535
+48 0 0 54
+84 0 0 1
+21 9 0 1
+48 0 0 54
+21 0 7 1
+84 0 0 254
+21 0 5 0
+84 0 0 1
+21 0 3 94
+48 0 0 54
+21 0 1 51
+6 0 0 65535
+6 0 0 0

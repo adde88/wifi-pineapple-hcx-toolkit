@@ -1,0 +1,32 @@
+# Example MAC Whitelist for hcxdumptool-launcher
+# Target APs for authorized security testing
+# Format: XX:XX:XX:XX:XX:XX (one per line)
+# Case-insensitive, comments supported
+
+# === Corporate Test Network ===
+# Main office APs
+AA:BB:CC:DD:EE:FF
+11:22:33:44:55:66
+
+# === Lab Environment ===
+# Test lab access points
+DE:AD:BE:EF:CA:FE
+13:37:13:37:13:37
+CA:FE:BA:BE:00:01
+
+# === Client Devices (if targeting clients) ===
+# Authorized test devices
+12:34:56:78:9A:BC
+FE:DC:BA:98:76:54
+
+# === Penetration Test Targets ===
+# Customer-provided target list
+# ACME Corp main building
+00:11:22:33:44:55
+66:77:88:99:AA:BB
+
+# Tips:
+# - Always verify MAC addresses before testing
+# - Keep this file updated during engagements
+# - Use 'iw dev wlan0 scan' to find MAC addresses
+# - Document authorization for each MAC

@@ -1,0 +1,16 @@
+#
+# BPF filter for hcxdumptool
+#
+# Copyright (C) Andreas Nilsen - @adde88 - https://www.github.com/adde88 - adde88@gmail..com
+#
+# This filter captures only EAP (Extensible Authentication Protocol) frames,
+# which are used in WPA/WPA2/WPA3-Enterprise (RADIUS) authentication.
+# Ideal for corporate network assessments.
+#
+# tcpdump -ddd 'ether proto 0x888e'
+#
+4
+40 0 0 12
+21 0 1 34958
+6 0 0 262144
+6 0 0 0

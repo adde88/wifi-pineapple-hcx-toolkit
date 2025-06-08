@@ -1,0 +1,28 @@
+# EAPOL-only Berkeley Packet Filter for hcxdumptool
+# Captures only EAPOL packets (4-way handshake)
+# Most efficient for collecting WPA/WPA2/WPA3 handshakes
+# Generated with: tcpdump -dd 'ether proto 0x888e or (type mgt subtype beacon)'
+#
+# This filter captures:
+# - EAPOL packets (0x888e)
+# - Beacon frames (for context)
+#
+# Usage: hcxdumptool-launcher -b eapol-only.bpf
+
+16
+0 0 0 12
+21 0 6 2048
+48 0 0 23
+21 0 4 1
+48 0 0 23
+84 0 0 240
+21 0 1 128
+6 0 0 65535
+40 0 0 2
+21 0 5 34958
+21 3 0 2048
+48 0 0 23
+84 0 0 240
+21 0 1 128
+6 0 0 65535
+6 0 0 0

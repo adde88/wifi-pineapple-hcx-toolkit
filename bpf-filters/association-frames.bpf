@@ -1,0 +1,21 @@
+# Association Request/Response Frames Berkeley Packet Filter
+# Captures association request and response frames
+# Useful for monitoring client connections
+# Generated with: tcpdump -dd 'type mgt subtype assoc-req or type mgt subtype assoc-resp'
+#
+# Usage: hcxdumptool-launcher -b /etc/hcxtools/bpf-filters/association-frames.bpf
+
+14
+0 0 0 12
+21 0 12 2048
+48 0 0 23
+21 0 10 1
+21 8 0 2048
+48 0 0 23
+84 0 0 240
+21 4 0 0
+21 0 3 16
+6 0 0 65535
+21 0 1 16
+6 0 0 65535
+6 0 0 0

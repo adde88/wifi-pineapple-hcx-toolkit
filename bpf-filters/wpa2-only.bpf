@@ -1,0 +1,52 @@
+# WPA2-only Berkeley Packet Filter for hcxdumptool
+# Captures only WPA2 protected networks
+# Generated with: tcpdump -dd 'wlan[0] == 0x80 and wlan[24:4] == 0x000fac04'
+#
+# This filter looks for:
+# - Management frames (0x80)
+# - RSN IE with AES-CCMP cipher (0x000fac04)
+#
+# Usage: hcxdumptool-launcher -b wpa2-only.bpf
+
+40
+0 0 0 12
+21 0 37 2048
+48 0 0 23
+21 0 35 1
+21 33 0 2048
+48 0 0 23
+84 0 0 240
+21 0 31 128
+32 0 0 24
+21 0 29 15
+32 0 0 25
+21 0 27 172
+32 0 0 26
+21 0 25 4
+32 0 0 105
+69 23 0 8191
+177 0 0 0
+72 0 0 2
+2 0 0 5
+48 0 0 0
+84 0 0 240
+21 0 18 64
+21 0 17 128
+48 0 0 9
+84 0 0 240
+21 14 0 0
+48 0 0 6
+69 12 0 8191
+177 0 0 0
+80 0 0 0
+21 0 9 221
+80 0 0 4
+21 0 7 0
+80 0 0 5
+21 0 5 15
+80 0 0 6
+21 0 3 172
+80 0 0 7
+21 0 1 4
+6 0 0 65535
+6 0 0 0

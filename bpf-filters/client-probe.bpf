@@ -1,0 +1,29 @@
+# Client Probe Requests with SSIDs Berkeley Packet Filter
+# Captures probe requests that contain SSID information
+# Useful for discovering what networks clients are searching for
+# Filters out broadcast probes (SSID length > 0)
+#
+# Usage: hcxdumptool-launcher -b /etc/hcxtools/bpf-filters/client-probe.bpf
+
+22
+0 0 0 12
+21 0 20 2048
+48 0 0 23
+21 0 18 1
+21 16 0 2048
+48 0 0 23
+84 0 0 240
+21 13 0 64
+21 12 0 192
+40 0 0 2
+12 0 0 0
+7 0 0 0
+96 0 0 8
+21 0 7 0
+40 0 0 24
+69 5 0 8191
+177 0 0 0
+80 0 0 1
+21 2 0 0
+6 0 0 0
+6 0 0 65535
