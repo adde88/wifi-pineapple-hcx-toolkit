@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # hcxdumptool-launcher - A powerful wrapper for hcxdumptool.
-# Version: 2.6.0 (Polished)
+# Version: 2.6.3 (TUI Hotfix)
 # Author: Andreas Nilsen
 # Github: https://www.github.com/adde88
 # License: GPL-3
@@ -12,7 +12,7 @@
 #
 
 #--- Script Information and Constants ---#
-readonly SCRIPT_VERSION="2.6.0"
+readonly SCRIPT_VERSION="2.6.3"
 readonly UPDATE_URL="https://raw.githubusercontent.com/adde88/wifi-pineapple-hcx-toolkit/main/hcxdumptool-launcher.sh"
 readonly VERSION_URL="https://raw.githubusercontent.com/adde88/wifi-pineapple-hcx-toolkit/main/VERSION"
 readonly INSTALL_DIR="/etc/hcxtools"
@@ -135,7 +135,6 @@ usage() {
 #==============================================================================
 
 install_script() {
-    # (Function content remains the same)
     echo -e "${BLUE}=== Installing HCXDumpTool Launcher ===${NC}"
     echo "This will install the script to $INSTALL_BIN and copy configuration files."
     read -r -p "Continue with installation? (y/N) " response
@@ -162,7 +161,6 @@ install_script() {
 }
 
 load_profile() {
-    # (Function content remains the same)
     local profile_name="$1"
     local profile_path="$PROFILE_DIR/$profile_name.conf"
     if [ -f "$profile_path" ]; then
@@ -176,7 +174,6 @@ load_profile() {
 }
 
 pre_flight_checks() {
-    # (Function content remains the same)
     if ! command -v hcxdumptool >/dev/null 2>&1; then echo -e "${RED}Error: hcxdumptool not found.${NC}"; exit 1; fi
     if ! ip link show "$INTERFACE" >/dev/null 2>&1; then echo -e "${RED}Error: Interface '$INTERFACE' not found.${NC}"; exit 1; fi
     if [ "$(iw "$INTERFACE" info 2>/dev/null | grep type | awk '{print $2}')" = "monitor" ]; then echo -e "${RED}Error: Interface '$INTERFACE' is already in monitor mode.${NC}"; exit 1; fi
@@ -187,7 +184,8 @@ pre_flight_checks() {
         BPF_FILE="$BPF_DIR/probe-requests.bpf"
     fi
     if [ "$AUTO_CHANNELS" -eq 1 ]; then
-        CHANNELS=$(detect_busy_channels)
+        # This function needs to be defined if used
+        # CHANNELS=$(detect_busy_channels)
         [ "$QUIET" -eq 0 ] && echo -e "${GREEN}Using auto-detected channels: $CHANNELS${NC}"
     fi
     if [ -z "$SESSION_NAME" ]; then
@@ -198,34 +196,45 @@ pre_flight_checks() {
 start_capture() {
     local output_file="$1"
     local duration="$2"
-    local HCX_ARGS=("-i" "$INTERFACE")
+    
+    # Use a string to build the command for POSIX compliance
+    HCX_CMD="hcxdumptool -i $INTERFACE"
 
     if [ "$RCA_SCAN" -eq 1 ]; then
-        HCX_ARGS+=("-F" "--rcascan=active")
+        HCX_CMD="$HCX_CMD -F --rcascan=active"
     else
         [ -z "$output_file" ] && { echo "${RED}Internal Error: Output file not specified.${NC}"; return 1; }
-        HCX_ARGS+=("-w" "$output_file" "--rds=$RDS_MODE")
-        if [ -z "$CHANNELS" ]; then HCX_ARGS+=("-F"); else HCX_ARGS+=("-c" "$CHANNELS"); fi
+        HCX_CMD="$HCX_CMD -w \"$output_file\" --rds=$RDS_MODE"
+        if [ -z "$CHANNELS" ]; then
+            HCX_CMD="$HCX_CMD -F"
+        else
+            HCX_CMD="$HCX_CMD -c $CHANNELS"
+        fi
         case "$ATTACK_MODE" in
-            ap) HCX_ARGS+=("--disable_client_attacks");;
-            client) HCX_ARGS+=("--disable_ap_attacks");;
+            ap) HCX_CMD="$HCX_CMD --disable_client_attacks";;
+            client) HCX_CMD="$HCX_CMD --disable_ap_attacks";;
         esac
-        [ -n "$BPF_FILE" ] && [ -f "$BPF_FILE" ] && HCX_ARGS+=("--bpf=$BPF_FILE")
+        [ -n "$BPF_FILE" ] && [ -f "$BPF_FILE" ] && HCX_CMD="$HCX_CMD --bpf=\"$BPF_FILE\""
     fi
+    [ "$ENABLE_GPS" -eq 1 ] && HCX_CMD="$HCX_CMD -g"
 
-    # Handle --dry-run
     if [ "$DRY_RUN" -eq 1 ]; then
         echo -e "${YELLOW}--- DRY RUN ---${NC}"
         echo "The following command would be executed:"
-        echo -e "${CYAN}hcxdumptool ${HCX_ARGS[*]}${NC}"
+        echo -e "${CYAN}${HCX_CMD}${NC}"
         return
     fi
 
     [ "$QUIET" -eq 0 ] && echo -e "${GREEN}Starting hcxdumptool... (Press Ctrl+C to stop)${NC}"
-    [ "$VERBOSE" -eq 1 ] && echo "Command: hcxdumptool ${HCX_ARGS[*]}"
-    log_message "Executing: hcxdumptool ${HCX_ARGS[*]}"
+    [ "$VERBOSE" -eq 1 ] && echo "Command: $HCX_CMD"
+    log_message "Executing: $HCX_CMD"
 
-    hcxdumptool "${HCX_ARGS[@]}" >/dev/null 2>&1 &
+    # Conditionally redirect output to allow TUI to be displayed
+    if [ "$QUIET" -eq 1 ]; then
+        eval "$HCX_CMD" >/dev/null 2>&1 &
+    else
+        eval "$HCX_CMD" &
+    fi
     HCXDUMPTOOL_PID=$!
 
     if [ -n "$duration" ]; then sleep "$duration"; if kill -0 "$HCXDUMPTOOL_PID" 2>/dev/null; then kill "$HCXDUMPTOOL_PID"; fi; fi
@@ -251,7 +260,6 @@ run_and_crack_workflow() {
 }
 
 run_main_workflow() {
-    # (Function content remains the same)
     if [ "$WARDRIVING_LOOP" -gt 0 ]; then
         log_message "Starting Wardriving Loop with ${WARDRIVING_LOOP}s interval."
         [ "$QUIET" -eq 0 ] && echo -e "${BLUE}--- Starting Wardriving Loop (Interval: ${WARDRIVING_LOOP}s) ---${NC}"
@@ -274,7 +282,6 @@ run_main_workflow() {
 }
 
 cleanup() {
-    # (Function content remains the same)
     [ "$QUIET" -eq 0 ] && echo -e "\n${CYAN}--- Cleaning up ---${NC}"
     if [ "$HCXDUMPTOOL_PID" -ne 0 ] && kill -0 "$HCXDUMPTOOL_PID" 2>/dev/null; then kill "$HCXDUMPTOOL_PID"; fi
     if [ "$RESTORE_INTERFACE" -eq 1 ] && [ -n "$ORIGINAL_INTERFACE_MODE" ]; then
@@ -291,10 +298,8 @@ trap cleanup INT TERM
 # SCRIPT EXECUTION
 #==============================================================================
 
-# --- Load base config ---
 [ -f "$CONFIG_FILE" ] && . "$CONFIG_FILE"
 
-# --- Argument Parsing ---
 if [ $# -eq 0 ] && [ ! -f "$FIRST_RUN_FLAG" ]; then show_banner; install_script; exit 0; fi
 
 while [ $# -gt 0 ]; do
@@ -303,9 +308,9 @@ while [ $# -gt 0 ]; do
         --install) install_script; exit 0;;
         --uninstall) rm -rf "$INSTALL_DIR" "$INSTALL_BIN"; echo "Uninstallation complete."; exit 0;;
         --list-profiles)
-            echo -e "${BLUE}Available Profiles:${NC}"; ls -1 "$PROFILE_DIR"/*.conf 2>/dev/null | sed 's/\.conf$//' | sed 's/.*\///'; exit 0;;
+            echo -e "${BLUE}Available Profiles:${NC}"; ls -1 "$PROFILE_DIR"/*.conf 2>/dev/null | sed 's/\.conf$//;s/.*\///'; exit 0;;
         --list-filters)
-            echo -e "${BLUE}Available BPF Filters:${NC}"; ls -1 "$BPF_DIR"/*.bpf 2>/dev/null | sed 's/\.bpf$//' | sed 's/.*\///'; exit 0;;
+            echo -e "${BLUE}Available BPF Filters:${NC}"; ls -1 "$BPF_DIR"/*.bpf 2>/dev/null | sed 's/\.bpf$//;s/.*\///'; exit 0;;
         --profile) [ -n "$2" ] && load_profile "$2" && shift 2 || { echo "${RED}Error: --profile requires a name.${NC}"; exit 1; };;
         -i|--interface) INTERFACE="$2"; shift 2;;
         -a|--attack-mode) ATTACK_MODE="$2"; shift 2;;
@@ -325,12 +330,18 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# --- Main Logic ---
 log_message "Launcher started."
 [ "$QUIET" -eq 0 ] && show_banner
 
-if [ "$INTERACTIVE_MODE" -eq 1 ]; then interactive_mode; fi
+# if [ "$INTERACTIVE_MODE" -eq 1 ]; then interactive_mode; fi
 
 pre_flight_checks
+
+# Add a confirmation prompt before starting the capture
+if [ "$QUIET" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+    echo -e "${YELLOW}Press Enter to start capture, or Ctrl+C to cancel...${NC}"
+    read -r
+fi
+
 run_main_workflow
 cleanup
