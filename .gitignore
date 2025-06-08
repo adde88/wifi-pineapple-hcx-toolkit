@@ -1,0 +1,14 @@
+# .gitignore
+
+# Ignore local capture files
+/root/hcxdumps/
+*.pcapng
+*.hc22000
+
+# Ignore log files
+*.log
+*.log.old
+
+# Ignore local OS or editor files
+.DS_Store
+Thumbs.db
