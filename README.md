@@ -1,6 +1,7 @@
 # WiFi Pineapple HCX Toolkit 🍍  
 ## An extremely powerful and user-friendly launcher script for hcxdumptool on the WiFi Pineapple MK7.
 ### Automate your WiFi security assessments with very advanced features, easy workflow automation, and full OpenWRT compatibility and optimizations.  
+### *Current v4.0.0*
 
 ### 🌟 Features  
 **Workflow Automation**:  
