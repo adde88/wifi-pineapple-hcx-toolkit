@@ -1,0 +1,27 @@
+# Legacy Client Hunter BPF Filter
+#
+# Purpose: Captures Association Request frames from legacy client devices that
+#          are advertising support for the outdated WPA1 security protocol.
+#
+# Use Case: Identifying vulnerable client devices on a network. A device that
+#           still relies on WPA1/TKIP can be a significant security risk,
+#           even if the network itself is modern. This is a high-priority
+#           finding in a corporate security audit.
+#
+# Usage:
+# hcxdumptool-launcher --bpf legacy-clients
+#
+# Generated with (best effort check for WPA1 IE in an association request):
+# hcxdumptool --bpfc="type mgt and subtype assoc-req and wlan[28:4] = 0xdd180050f2 and wlan[32:1] = 1"
+
+10
+48 0 0 0
+84 0 0 240
+21 0 7 0
+48 0 0 28
+21 0 5 3709300978
+48 0 0 32
+21 0 3 1
+21 1 0 32
+6 0 0 65535
+6 0 0 0

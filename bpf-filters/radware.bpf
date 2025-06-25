@@ -1,0 +1,44 @@
+# Radware Ltd. OUI BPF Filter
+#
+# Purpose: Captures traffic from any device whose MAC address OUI matches
+#          Radware Ltd. registered OUIs.
+#
+# Use Case: For authorized monitoring, auditing, or red team exercises
+#           to specifically identify and log traffic from Radware devices.
+#
+# IMPORTANT: This filter is based on Radware's registered OUI. MAC
+#            addresses can be spoofed, so this should be treated as a
+#            strong indicator, not definitive proof.
+#
+# OUIs Included in this Filter:
+# 00:23:33 - Radware Ltd.
+#
+# Common Radware appliances using this OUI:
+# - Radware DefensePro DDoS Protection
+# - Radware Alteon Application Delivery Controllers
+# - Radware AppWall Web Application Firewalls
+# - Radware Vdirect Management Platform
+# - Radware Cloud WAF Service appliances
+#
+# Usage:
+# hcxdumptool-launcher --bpf radware
+#
+# Generated for wlan addr2 matching Radware OUI
+
+15
+32 0 0 10
+21 0 12 2307891
+32 0 0 4
+21 0 10 65535
+32 0 0 8
+21 0 8 65535
+21 0 7 2048
+32 0 0 4
+21 0 5 65535
+32 0 0 8
+21 0 3 65535
+21 0 2 2048
+32 0 0 4
+21 0 0 65535
+6 0 0 65535
+6 0 0 0

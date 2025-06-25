@@ -1,0 +1,27 @@
+# WPA3 Transition Mode (Downgrade Recon) BPF Filter
+#
+# Purpose: Captures beacons from networks that are operating in WPA3
+#          "Transition Mode," meaning they allow both WPA2-PSK and WPA3-SAE
+#          clients to connect simultaneously.
+#
+# Use Case: For identifying networks that may be susceptible to downgrade
+#           attacks, where an attacker forces a client to connect using the
+#           weaker WPA2 protocol, even if both the client and AP support WPA3.
+#
+# Note: This is a complex, "best effort" filter that looks for the SAE AKM suite.
+#
+# Usage:
+# hcxdumptool-launcher --bpf downgrade-attack-recon
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype beacon and wlan[48:4] = 0x000fac08"
+
+8
+48 0 0 0
+84 0 0 240
+21 0 5 128
+48 0 0 48
+21 0 3 10317
+21 1 0 8
+6 0 0 65535
+6 0 0 0

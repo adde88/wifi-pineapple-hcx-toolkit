@@ -1,0 +1,33 @@
+# Broad Discovery BPF Filter
+#
+# Purpose: To capture the key management frames from the widest possible
+#          range of old and new Wi-Fi devices for maximum discovery.
+#
+# Use Case: This is the ideal filter for an initial, comprehensive survey
+#           of a new wireless environment to understand what APs and clients
+#           are active and how they are trying to connect.
+#
+# Frames Captured:
+# - Beacon
+# - Probe Request
+# - Probe Response
+# - Authentication Request/Response
+# - Association Request/Response
+#
+# Usage:
+# hcxdumptool-launcher --bpf broad-discovery
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and (subtype beacon or subtype probe-req or subtype probe-resp or subtype auth or subtype assoc-req)"
+
+10
+48 0 0 0
+84 0 0 240
+21 0 7 128
+21 0 6 64
+21 0 5 80
+21 0 4 176
+21 0 3 0
+21 0 2 32
+6 0 0 65535
+6 0 0 0

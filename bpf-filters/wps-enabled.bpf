@@ -1,0 +1,26 @@
+# Wi-Fi Protected Setup (WPS) Enabled BPF Filter
+#
+# Purpose: Captures beacon and probe response frames only from Access Points
+#          that are advertising the Wi-Fi Protected Setup (WPS) IE.
+#
+# Use Case: Instantly identify networks that have the WPS feature enabled,
+#           which is a primary target for attacks like the Pixie Dust attack
+#           to recover the WPA-PSK key.
+#
+# Usage:
+# hcxdumptool-launcher --bpf wps-enabled
+#
+# Generated with (best effort check for WPS IE):
+# hcxdumptool --bpfc="type mgt and (subtype beacon or subtype probe-resp) and wlan[36:4] = 0xdd180050f2 and wlan[40:1] = 4"
+
+10
+48 0 0 0
+84 0 0 240
+21 0 7 136
+48 0 0 36
+21 0 5 3709300978
+48 0 0 40
+21 0 3 4
+21 1 0 8
+6 0 0 65535
+6 0 0 0

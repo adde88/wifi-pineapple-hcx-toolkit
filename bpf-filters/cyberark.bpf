@@ -1,0 +1,43 @@
+# CyberArk Infrastructure OUI BPF Filter
+#
+# Purpose: Captures traffic from any device whose MAC address OUI matches
+#          OUIs commonly used in CyberArk infrastructure deployments.
+#
+# Use Case: For authorized monitoring, auditing, or red team exercises
+#           to specifically identify and log traffic from CyberArk environments.
+#
+# IMPORTANT: CyberArk primarily provides software solutions and often
+#            deploys on standard server hardware. These OUIs represent
+#            common hardware vendors used in CyberArk deployments.
+#
+# OUIs Included in this Filter:
+# 00:E0:81 - Tyan Computer (server hardware commonly used)
+#
+# Common CyberArk components that may use this hardware:
+# - CyberArk Privileged Access Management Vault
+# - CyberArk Password Vault Web Access
+# - CyberArk Central Policy Manager
+# - CyberArk Privileged Session Manager
+#
+# Usage:
+# hcxdumptool-launcher --bpf cyberark
+#
+# Generated for wlan addr2 matching CyberArk infrastructure OUI
+
+15
+32 0 0 10
+21 0 12 14712448
+32 0 0 4
+21 0 10 65535
+32 0 0 8
+21 0 8 65535
+21 0 7 2048
+32 0 0 4
+21 0 5 65535
+32 0 0 8
+21 0 3 65535
+21 0 2 2048
+32 0 0 4
+21 0 0 65535
+6 0 0 65535
+6 0 0 0

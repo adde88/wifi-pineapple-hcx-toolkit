@@ -1,0 +1,31 @@
+# Hak5 Device Hunter BPF Filter
+#
+# Purpose: Captures traffic from devices with MAC addresses associated
+#          with Hak5 products, including various WiFi Pineapple models.
+#
+# Use Case: Useful for red team vs. blue team exercises or for detecting
+#           potential rogue devices on a network during a security assessment.
+#
+# Note: This filter checks for multiple OUIs (FC:F1:CD, 00:13:37, 00:C0:CA).
+#       MAC addresses can be spoofed, so this is a strong indicator, not definitive proof.
+#
+# Usage:
+# hcxdumptool-launcher --bpf hak5-devices
+#
+# Generated with:
+# hcxdumptool --bpfc="(wlan addr2 fc:f1:cd:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 00:13:37:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 00:c0:ca:00:00:00 mask ff:ff:ff:00:00:00)"
+
+13
+32 0 0 10
+21 0 8 4240526592
+21 0 7 206927360
+21 0 6 5054464
+21 0 5 12599296
+21 0 4 2048
+32 0 0 4
+21 0 5 65535
+32 0 0 8
+21 0 3 65535
+21 0 2 2048
+6 0 0 65535
+6 0 0 0

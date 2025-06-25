@@ -1,0 +1,24 @@
+# Fast BSS Transition (802.11r) BPF Filter
+#
+# Purpose: Captures the initial authentication frames that are unique to
+#          networks supporting Fast BSS Transition (802.11r).
+#
+# Use Case: Quickly identifying advanced enterprise networks. This can be
+#           a starting point for testing for vulnerabilities related to
+#           fast roaming implementations or for mapping out the APs that
+#           are part of a single roaming domain.
+#
+# Usage:
+# hcxdumptool-launcher --bpf fast-roaming-80211r
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype auth and wlan[24:2] = 1"
+
+6
+48 0 0 0
+84 0 0 240
+21 0 3 176
+48 0 0 24
+21 0 1 1
+6 0 0 65535
+6 0 0 0

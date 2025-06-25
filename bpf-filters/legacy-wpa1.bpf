@@ -1,0 +1,28 @@
+# Legacy WPA1 (TKIP) BPF Filter
+#
+# Purpose: Captures beacons from networks using the original, now-deprecated
+#          WPA1 security standard.
+#
+# Use Case: Finding outdated networks that have not been upgraded to WPA2.
+#           While stronger than WEP, WPA1/TKIP has known vulnerabilities
+#           and is a high-priority finding in a security audit.
+#
+# Note: This is a "best effort" filter checking for the WPA IE at a common offset.
+#
+# Usage:
+# hcxdumptool-launcher --bpf legacy-wpa1
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype beacon and wlan[36:4] = 0xdd180050f2 and wlan[40:1] = 1"
+
+10
+48 0 0 0
+84 0 0 240
+21 0 7 128
+48 0 0 36
+21 0 5 3709300978
+48 0 0 40
+21 0 3 1
+21 1 0 8
+6 0 0 65535
+6 0 0 0

@@ -1,0 +1,43 @@
+# Check Point Software Technologies Ltd. OUI BPF Filter
+#
+# Purpose: Captures traffic from any device whose MAC address OUI matches
+#          Check Point Software Technologies Ltd. registered OUIs.
+#
+# Use Case: For authorized monitoring, auditing, or red team exercises
+#           to specifically identify and log traffic from Check Point devices.
+#
+# IMPORTANT: This filter is based on Check Point's registered OUI. MAC
+#            addresses can be spoofed, so this should be treated as a
+#            strong indicator, not definitive proof.
+#
+# OUIs Included in this Filter:
+# 00:1C:7F - Check Point Software Technologies Ltd.
+#
+# Common Check Point appliances using this OUI:
+# - Check Point Security Gateways
+# - Check Point Management Servers  
+# - Check Point Threat Prevention Appliances
+# - Check Point Mobile Access Blades
+#
+# Usage:
+# hcxdumptool-launcher --bpf checkpoint
+#
+# Generated for wlan addr2 matching Check Point OUI
+
+15
+32 0 0 10
+21 0 12 1870975
+32 0 0 4
+21 0 10 65535
+32 0 0 8
+21 0 8 65535
+21 0 7 2048
+32 0 0 4
+21 0 5 65535
+32 0 0 8
+21 0 3 65535
+21 0 2 2048
+32 0 0 4
+21 0 0 65535
+6 0 0 65535
+6 0 0 0

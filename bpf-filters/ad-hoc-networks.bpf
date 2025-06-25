@@ -1,0 +1,25 @@
+# Ad-Hoc (IBSS) Network BPF Filter
+#
+# Purpose: Captures only beacon frames from devices operating in Ad-Hoc
+#          (peer-to-peer) mode.
+#
+# Use Case: Detecting potentially unauthorized or insecure peer-to-peer
+#           networks operating alongside a primary infrastructure network.
+#           These are often forgotten or misconfigured and can be a
+#           significant security risk.
+#
+# Usage:
+# hcxdumptool-launcher --bpf ad-hoc-networks
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype beacon and (wlan[34:2] & 2) != 0"
+
+8
+48 0 0 0
+84 0 0 240
+21 0 5 128
+53 0 0 2
+48 0 0 34
+21 1 0 0
+6 0 0 65535
+6 0 0 0

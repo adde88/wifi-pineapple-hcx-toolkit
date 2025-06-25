@@ -1,83 +1,53 @@
-# WiFi Pineapple HCX Toolkit 🍍  
-## An extremely powerful and user-friendly launcher script for hcxdumptool on the WiFi Pineapple MK7.
-### Automate your WiFi security assessments with very advanced features, easy workflow automation, and full OpenWRT compatibility and optimizations.  
-### *Current v4.0.9*
+# WiFi Pineapple HCX Toolkit ??
+### v5.0.0 - "The Masterpiece Edition"
 
-### 🌟 Features  
-**Workflow Automation**:  
---run-and-crack: Automatically convert captures to a specified hash format post-capture.  
---wardriving-loop: Run captures in a continuous loop for mobile data collection.  
---client-hunt: A one-switch mode to optimize settings for finding and capturing client devices.  
+An advanced automation framework for `hcxdumptool` and `hcxtools` on the WiFi Pineapple MKVII and other OpenWrt devices. This toolkit transforms the powerful `hcx` binaries into a streamlined, user-friendly, and highly effective system for WiFi security assessments.
 
-**Configuration & Debugging**:  
---profile *NAME*: Load pre-defined sets of arguments for specific scenarios.  
---interactive: A guided setup that prompts you for the most common options interactively.  
---dry-run: Preview the exact hcxdumptool command before executing. *(Debugging Purposes)  
---list-profiles & --list-filters: See all available configurations at a glance.  
+---
 
-**Smart Interface & Channel Management**:  
-Validates interface modes and can automatically find and target the busiest channels.  
-Advanced Filtering: Use MAC whitelists/blacklists and advanced Berkeley Packet Filters *(BPF)*.  
-Log Rotation: Automatically manages log file size to prevent storage issues on long-running devices.  
+## Core Philosophy
 
-### 📋 Requirements:  
-WiFi Pineapple MK7 *(or any OpenWRT device, though it's optimized specifically for the WiFi Pineapple MK7, and i **don't** provide support for other devices)*  
-hcxdumptool v21.02.0 or newer  
-hcxtools *(optional, but highly recommended for analysis)*  
-git *(for installation)*  
-root access over SSH, or using other terminals on the device.  
+This toolkit was built to be a masterpiece of automation. It bridges the gap between the raw power of `hcxdumptool` and the need for efficient, repeatable, and insightful analysis. It is designed for both novice users who need a guided experience and advanced users who require deep control and customization.
 
-### 🚀 Quick Start  
-Clone the Repository:  
-```bash
-opkg update && opkg install git
-git clone https://github.com/adde88/wifi-pineapple-hcx-toolkit
-cd wifi-pineapple-hcx-toolkit
-```
-**Run the Installer**:  
-The installer copies the main script to your $PATH and sets up configuration directories, including profiles and several very advanced BPF filters.  
-```bash
-chmod +x hcxdumptool-launcher.sh
-./hcxdumptool-launcher.sh --install
-```
-**Run Your First Capture**:  
-Now you can run the launcher from anywhere.  
+## ?? Major Features
 
-### See what profiles you have available  
-```bash
-hcxdumptool-launcher --list-profiles  
-```
-### Run a quick client hunt and see what command would be used  
-```bash
-hcxdumptool-launcher --client-hunt -d 180 --dry-run  
-```
-### Run with a pre-defined aggressive profile
-```bash
-hcxdumptool-launcher --profile aggressive
-```
-### Target channel 6, then convert to WPA-PMKID-PBKDF2 format (16800)  
-```bash
-hcxdumptool-launcher -c 6 -d 300 --run-and-crack --export-format 16800  
-```
-### Start a wardriving session, capturing in 10-minute loops  
-```bash
-hcxdumptool-launcher --wardriving-loop 600  
-```
-**All Options**:  
-For a full list of commands and options, run:
-```bash
-hcxdumptool-launcher --help
-```
-**⚠️ Legal Disclaimer**  
-IMPORTANT: This tool is for authorized security testing only!  
-Unauthorized access to computer networks is illegal.  
-Users are responsible for complying with all applicable laws.  
+This toolkit is more than just a wrapper; it's a complete workflow engine.
 
-**🤝 Contributing**  
-Contributions are welcome! Please fork the repository and create a pull request with your improvements.  
+### ?? **Easy Modes: "Personas" for Every Scenario**
+Get started immediately with simple, powerful flags for common tasks:
+* `--hunt-handshakes`: The go-to mode for actively capturing WPA/WPA2 handshakes via deauthentication attacks.
+* `--passive`: A 100% stealthy listening mode that disables all outgoing packets. Perfect for covert monitoring.
+* `--survey`: A quick, non-intrusive scan to see all APs in the area without attacking or saving files.
+* `--enable-gps`: Automatically use a connected `gpsd`-compatible device to embed coordinates directly into capture files.
 
-**📄 License**  
-This project is licensed under the GNU General Public License v3.0.  
+### ?? **The HCX Analyzer: Beyond Just Hashes**
+The completely overhauled `hcx-analyzer.sh` script is the heart of the toolkit, offering multiple analysis modes through an **interactive menu**:
+* **`--mode summary`**: Get a quick or deep overview of captured hashes, network names, and devices.
+* **`--mode intel`**: A powerful, automated intelligence gathering mode to report on device vendors, group hashes by ESSID, and get detailed statistics.
+* **`--mode vuln`**: A comprehensive vulnerability assessment that tests for thousands of known default router passwords and identifies other weaknesses.
+* **`--mode export`**: Converts your captures and data into other common formats like `.cap` and `.csv` for use in other tools or for reporting.
+* **`--mode remote-crack`**: Securely offloads your captured hashes to a more powerful machine for cracking with `hashcat`, configured via `/etc/hcxtools/hcxscript.conf`.
+
+### ??? **Workflow & Customization**
+Tailor the toolkit to your exact needs:
+* `--wardriving-loop <seconds>`: Run captures in continuous, timed loops for mobile data collection.
+* `--profile <name>`: Load pre-defined sets of arguments from configuration files for specific, repeatable scenarios.
+
+### ? **System & Reliability**
+Built for stability and ease of management on embedded devices:
+* **Robust Dependency Checking**: Uses a fast and reliable method to ensure correct tool versions are installed.
+* **Reliable Interface Management**: Proactively sets the wireless interface to managed mode and correctly restores it upon completion.
+* **Automatic Updates**: The `--update` flag checks the GitHub repository for the latest version and installs it.
+
+---
+
+## ?? Requirements
+* A WiFi Pineapple MKVII or other OpenWrt-based device.
+* `hcxdumptool-custom` (v6.3.4-2 or newer)
+* `hcxtools-custom` (v6.2.7-1 or newer)
+* `git` and `opkg` for installation.
+* Root access.
+
 
 ### Support This Project
 If you find this project helpful, please consider supporting its continued development:  
@@ -88,4 +58,4 @@ If you find this project helpful, please consider supporting its continued devel
 
 - **Contribute**: Pull requests and bug reports are always welcome!
 
-*Your support helps keep this project maintained and improved. Thank you! ❤️*
+*Your support helps keep this project maintained and improved. Thank you! ??*

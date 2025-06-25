@@ -1,0 +1,30 @@
+# WPA3-Enterprise Transition Mode BPF Filter
+#
+# Purpose: Captures beacons from networks advertising support for both a
+#          traditional WPA2-Enterprise AKM and the modern WPA3-Enterprise
+#          SAE Public Key AKM.
+#
+# Use Case: Identifying large-scale enterprise networks that are in a
+#           "transition mode." These configurations can sometimes be targeted
+#           with sophisticated downgrade attacks to force clients onto weaker
+#           authentication schemes.
+#
+# Note: This is a complex, "best effort" filter.
+#
+# Usage:
+# hcxdumptool-launcher --bpf wpa3-enterprise-transition
+#
+# Generated with (best effort check for both 802.1x and SAE AKMs):
+# hcxdumptool --bpfc="type mgt and subtype beacon and wlan[48:4] = 0x000fac01 and wlan[54:4] = 0x000fac08"
+
+10
+48 0 0 0
+84 0 0 240
+21 0 7 128
+48 0 0 48
+21 0 5 10316
+48 0 0 54
+21 0 3 10317
+21 1 0 8
+6 0 0 65535
+6 0 0 0

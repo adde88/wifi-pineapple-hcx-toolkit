@@ -1,0 +1,26 @@
+# 802.11n (HT) Capable Networks BPF Filter
+#
+# Purpose: Captures beacon and probe responses from networks that advertise
+#          802.11n (High Throughput) capabilities.
+#
+# Use Case: Useful for identifying networks that support .11n, which can
+#           be targets for specific types of attacks or analysis.
+#
+# Limitation: This is a "best effort" filter that checks the most common
+#             offset for the HT Capabilities IE. It may not catch all frames.
+#
+# Usage:
+# hcxdumptool-launcher --bpf 80211n-ht
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and (subtype beacon or subtype probe-resp) and wlan[36:1] = 45"
+
+8
+48 0 0 0
+84 0 0 240
+21 0 5 136
+48 0 0 36
+21 0 3 45
+21 1 0 8
+6 0 0 65535
+6 0 0 0

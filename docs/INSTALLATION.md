@@ -1,83 +1,35 @@
-# Advanced Usage Guide
+# Installation Guide
 
-This guide covers advanced techniques and scenarios for power users of the WiFi Pineapple HCX Toolkit.
+This guide provides step-by-step instructions for installing the WiFi Pineapple HCX Toolkit v5.0.0.
 
-## 1. Workflow Automation
+## Prerequisites
 
-The launcher includes several flags to automate common workflows from a single command.
+Before installing, please ensure your system meets the following requirements:
 
-### Client Hunting (`--client-hunt`)
-This mode automatically optimizes the settings for capturing client probe requests and handshakes. It's the fastest way to find what clients are in the area.
-```bash
-# Run a client hunt for 10 minutes, then convert the results for cracking
-hcxdumptool-launcher --client-hunt -d 600 --run-and-crack
+* A WiFi Pineapple MKVII or other OpenWrt-based device.
+* **hcxdumptool-custom**: v6.3.4-2 or newer installed via `opkg`.
+* **hcxtools-custom**: v6.2.7-1 or newer installed via `opkg`.
+* **git**: The `git` package must be installed (`opkg update && opkg install git`).
+* Root access to the device.
 
-Wardriving (--wardriving-loop)
-This mode is perfect for mobile data collection. It runs captures in a continuous loop, saving a new timestamped file for each cycle.
+## Installation Steps
 
-# Start a wardriving session, saving a new file every 5 minutes (300s)
-# Enable GPS logging for geographic correlation
-hcxdumptool-launcher --wardriving-loop 300 -g
+1.  **Clone the Repository**
+    Log into your device via SSH and run the following commands to clone the toolkit repository:
+    ```bash
+    git clone [https://github.com/adde88/wifi-pineapple-hcx-toolkit.git](https://github.com/adde88/wifi-pineapple-hcx-toolkit.git)
+    cd wifi-pineapple-hcx-toolkit
+    ```
 
-Automatic Cracking Prep (--run-and-crack)
-After any capture (single or looped), this flag will automatically run hcxpcapngtool to convert the capture to the .hc22000 format used by hashcat.
+2.  **Run the Installer**
+    Execute the installer script from within the cloned directory. The script will check for the correct dependencies and copy all necessary files to their appropriate locations on your system.
+    ```bash
+    ./hcxdumptool-launcher.sh --install
+    ```
 
-# Run a standard capture for 15 minutes, then convert
-hcxdumptool-launcher -d 900 --run-and-crack
-
-2. Using Configuration Profiles (--profile)
-Profiles allow you to save and load complete sets of arguments for repeatable scenarios. Profiles are stored as .conf files in /etc/hcxtools/profiles/.
-
-Example aggressive.conf profile:
-
-# /etc/hcxtools/profiles/aggressive.conf
-#
-# Profile for active, aggressive capture.
-
-ATTACK_MODE="all"
-POWER_SAVE_DISABLE=1
-AUTO_CHANNELS=1
-RDS_MODE=2
-
-To use the profile:
-
-# Load the 'aggressive' profile and run for 10 minutes
-hcxdumptool-launcher --profile aggressive -d 600
-
-Flags passed on the command line will always override settings from a profile.
-
-3. Custom BPF Filters
-Use Berkeley Packet Filters to capture only the specific traffic you are interested in.
-
-Creating a WPA3-Only Filter
-# This tcpdump command creates a BPF file that targets WPA3 management frames
-tcpdump -ddd 'wlan type mgt subtype beacon and wlan[40] & 0x10 = 0x10' \
-    > /etc/hcxtools/bpf-filters/wpa3-sae-only.bpf
-
-Using a Custom Filter
-# Run a capture using your new WPA3 filter
-hcxdumptool-launcher -b /etc/hcxtools/bpf-filters/wpa3-sae-only.bpf
-
-4. Automation with Cron
-The launcher is ideal for scheduled, automated captures. Use crontab -e to edit your schedule.
-
-# Every day at 2 AM, run a 4-hour capture of guest networks
-# This uses a profile that might whitelist the guest network's MAC address
-0 2 * * * /usr/bin/hcxdumptool-launcher --profile guest-audit -d 14400 -q
-
-# Every 15 minutes, run a quick 1-minute scan for new clients
-*/15 * * * * /usr/bin/hcxdumptool-launcher --client-hunt -d 60 -q
-
-5. Advanced Analysis
-While the launcher helps with capture, hcxtools is essential for deep analysis.
-
-Finding Common Networks Across Multiple Captures
-# Extract all ESSIDs from a directory of captures
-hcxpcapngtool -E all_essids.txt /root/hcxdumps/*.pcapng
-
-# Sort and count to find the most common networks
-sort all_essids.txt | uniq -c | sort -rn
-
-Correlating Clients and Probed Networks
-# Get a list of clients and the networks they are probing for
-hcxpcapngtool --info=stdout /root/hcxdumps/*.pcapng | grep "CLIENT ->"
+3.  **Verify the Installation**
+    After the installation completes, you can verify that the tools are ready by running the launcher with the version flag:
+    ```bash
+    hcxdumptool-launcher --version
+    ```
+    This should display the correct version number. The toolkit is now installed and ready to use.

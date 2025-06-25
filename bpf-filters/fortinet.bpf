@@ -1,0 +1,56 @@
+# Fortinet (Israeli Operations) OUI BPF Filter
+#
+# Purpose: Captures traffic from any device whose MAC address OUI matches
+#          Fortinet Inc. registered OUIs, including Israeli operations.
+#
+# Use Case: For authorized monitoring, auditing, or red team exercises
+#           to specifically identify and log traffic from Fortinet devices.
+#
+# IMPORTANT: This filter is based on Fortinet's registered OUIs. MAC
+#            addresses can be spoofed, so this should be treated as a
+#            strong indicator, not definitive proof.
+#
+# OUIs Included in this Filter:
+# 00:09:0F - Fortinet Inc. (legacy range)
+# 90:6C:AC - Fortinet Inc. (newer range)
+#
+# Common Fortinet appliances using these OUIs:
+# - FortiGate Next-Generation Firewalls
+# - FortiAnalyzer Log Management
+# - FortiManager Centralized Management
+# - FortiMail Email Security
+# - FortiWeb Web Application Firewalls
+#
+# Usage:
+# hcxdumptool-launcher --bpf fortinet
+#
+# Generated for wlan addr2 matching Fortinet OUIs
+
+25
+32 0 0 10
+21 0 22 589839
+21 0 21 2424524032
+32 0 0 4
+21 0 19 65535
+32 0 0 8
+21 0 17 65535
+21 0 16 2048
+32 0 0 4
+21 0 14 65535
+32 0 0 8
+21 0 12 65535
+21 0 11 2048
+32 0 0 4
+21 0 9 65535
+32 0 0 8
+21 0 7 65535
+21 0 6 2048
+32 0 0 4
+21 0 4 65535
+32 0 0 8
+21 0 2 65535
+21 0 1 2048
+32 0 0 4
+21 0 0 65535
+6 0 0 65535
+6 0 0 0

@@ -1,0 +1,23 @@
+# Mesh Network (802.11s) BPF Filter
+#
+# Purpose: Captures management action frames specific to 802.11s mesh
+#          networks. This allows for the discovery and analysis of
+#          mesh network traffic while ignoring standard AP/client frames.
+#
+# Use Case: Identifying and mapping wireless mesh infrastructure, which is
+#           common in IoT, industrial, and municipal network deployments.
+#
+# Usage:
+# hcxdumptool-launcher --bpf mesh-networks
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype action and wlan[24:1] = 13"
+
+6
+48 0 0 0
+84 0 0 240
+21 0 3 208
+48 0 0 24
+21 0 1 13
+6 0 0 65535
+6 0 0 0

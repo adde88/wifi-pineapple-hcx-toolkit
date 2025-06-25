@@ -1,0 +1,44 @@
+# NICE Systems OUI BPF Filter
+#
+# Purpose: Captures traffic from any device whose MAC address OUI matches
+#          OUIs associated with NICE Systems infrastructure.
+#
+# Use Case: For authorized monitoring, auditing, or red team exercises
+#           to specifically identify and log traffic from NICE Systems devices.
+#
+# IMPORTANT: NICE Systems often uses standard server hardware. This OUI
+#            represents hardware commonly found in NICE deployments.
+#            MAC addresses can be spoofed.
+#
+# OUIs Included in this Filter:
+# 00:A0:45 - Advanced Logic Research (heritage hardware used by NICE)
+#
+# Common NICE Systems components that may use this hardware:
+# - NICE Engage Platform
+# - NICE Workforce Management
+# - NICE Quality Management
+# - NICE Performance Management
+# - NICE Analytics and Reporting
+#
+# Usage:
+# hcxdumptool-launcher --bpf nice-systems
+#
+# Generated for wlan addr2 matching NICE Systems infrastructure OUI
+
+15
+32 0 0 10
+21 0 12 10588581
+32 0 0 4
+21 0 10 65535
+32 0 0 8
+21 0 8 65535
+21 0 7 2048
+32 0 0 4
+21 0 5 65535
+32 0 0 8
+21 0 3 65535
+21 0 2 2048
+32 0 0 4
+21 0 0 65535
+6 0 0 65535
+6 0 0 0

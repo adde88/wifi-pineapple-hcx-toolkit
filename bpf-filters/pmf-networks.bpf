@@ -1,0 +1,30 @@
+# Protected Management Frames (PMF) Reconnaissance BPF Filter
+#
+# Purpose: This filter captures beacon and probe response frames from any
+#          network that advertises WPA2 or WPA3 security (i.e., any network
+#          that includes a Robust Security Network Information Element - RSN IE).
+#
+# IMPORTANT: BPF cannot reliably check the specific PMF bit. This filter
+#            is the first step. You must analyze the resulting .pcapng file
+#            in a tool like Wireshark with the display filter
+#            "wlan.rsn.mfp.capable == 1" to see which of the captured
+#            networks actually have PMF enabled.
+#
+# Use Case: To create a list of all modern, secure networks in an area
+#           to prepare for a deeper security posture assessment.
+#
+# Usage:
+# hcxdumptool-launcher --bpf pmf-networks
+#
+# Generated with (best effort check for RSN IE at common offset):
+# hcxdumptool --bpfc="type mgt and (subtype beacon or subtype probe-resp) and wlan[36:1] = 48"
+
+8
+48 0 0 0
+84 0 0 240
+21 0 5 136
+48 0 0 36
+21 0 3 48
+21 1 0 8
+6 0 0 65535
+6 0 0 0

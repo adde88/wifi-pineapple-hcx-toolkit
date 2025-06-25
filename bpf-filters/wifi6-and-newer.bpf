@@ -1,0 +1,28 @@
+# Wi-Fi 6 (HE) and Wi-Fi 7 (EHT) BPF Filter
+#
+# Purpose: This filter captures beacon and probe response frames from any
+#          network that advertises Wi-Fi 6 (High-Efficiency) capabilities.
+#          Since Wi-Fi 7 is an extension of Wi-Fi 6, this will capture
+#          traffic from BOTH Wi-Fi 6 and Wi-Fi 7 networks.
+#
+# Use Case: Excellent for filtering out all legacy network traffic to focus
+#           only on modern, advanced Wi-Fi standards.
+#
+# Note: This is a "best effort" filter that checks for the HE capabilities
+#       element at its most common location within the frame.
+#
+# Usage:
+# hcxdumptool-launcher --bpf wifi6-and-newer
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and (subtype beacon or subtype probe-resp) and wlan[36:2] = 0x23ff"
+
+8
+48 0 0 0
+84 0 0 240
+21 0 5 136
+48 0 0 36
+21 0 3 9215
+21 1 0 8
+6 0 0 65535
+6 0 0 0

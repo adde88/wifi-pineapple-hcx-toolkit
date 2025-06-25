@@ -1,0 +1,25 @@
+# Unassociated Client BPF Filter
+#
+# Purpose: Captures broadcast Probe Requests, which are a strong
+#          indicator of a client that is not currently connected to
+#          an Access Point and is actively searching for networks.
+#
+# Use Case: Excellent for identifying potential targets or understanding
+#           what networks nearby devices are looking for.
+#
+# Usage:
+# hcxdumptool-launcher --bpf unassociated-clients
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype probe-req and wlan da ff:ff:ff:ff:ff:ff"
+
+8
+48 0 0 0
+84 0 0 240
+21 0 5 64
+32 0 0 4
+21 0 3 4294967295
+32 0 0 8
+21 0 1 4294967295
+6 0 0 65535
+6 0 0 0

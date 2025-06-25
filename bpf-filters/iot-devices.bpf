@@ -1,0 +1,29 @@
+# IoT / Smart Device BPF Filter
+#
+# Purpose: Captures traffic from devices whose MAC addresses belong to
+#          common IoT and smart home device manufacturers.
+#
+# Use Case: Useful for quickly identifying potentially vulnerable embedded
+#           systems during a security audit of a home or office network.
+#           You can add more vendor OUIs to this filter as needed.
+#
+# Usage:
+# hcxdumptool-launcher --bpf iot-devices
+#
+# Generated with:
+# hcxdumptool --bpfc="(wlan addr2 24:0a:c4:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 10:5a:17:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 00:e0:4c:00:00:00 mask ff:ff:ff:00:00:00)"
+
+13
+32 0 0 10
+21 0 8 379532544
+21 0 7 262334720
+21 0 6 622592
+21 0 5 1335296
+21 0 4 2048
+32 0 0 4
+21 0 5 65535
+32 0 0 8
+21 0 3 65535
+21 0 2 2048
+6 0 0 65535
+6 0 0 0

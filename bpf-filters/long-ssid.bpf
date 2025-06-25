@@ -1,0 +1,29 @@
+# Long SSID (Anomalous Beacon) BPF Filter
+#
+# Purpose: Captures beacons from networks using an unusually long SSID name
+#          (greater than 30 characters). The maximum is 32.
+#
+# Use Case: This is an experimental filter for finding anomalous networks.
+#           Extremely long SSIDs are rare in legitimate networks but are
+#           sometimes used by testing tools, fuzzers, or in attempts to
+#           exploit bugs in client-side software.
+#
+# Note: This filter is highly experimental and fragile, as it assumes the
+#       SSID IE is the very first IE after the fixed beacon parameters.
+#
+# Usage:
+# hcxdumptool-launcher --bpf long-ssid
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype beacon and wlan[36:1] = 0 and wlan[37:1] > 30"
+
+8
+48 0 0 0
+84 0 0 240
+21 0 5 128
+48 0 0 36
+21 0 3 0
+45 0 0 30
+48 0 0 37
+6 0 0 65535
+6 0 0 0

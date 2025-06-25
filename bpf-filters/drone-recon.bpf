@@ -1,0 +1,31 @@
+# Drone / UAS Reconnaissance BPF Filter
+#
+# Purpose: Captures traffic from devices with MAC addresses associated with
+#          major drone/UAS manufacturers.
+#
+# Use Case: For physical security assessments, identifying unauthorized drone
+#           activity, or analyzing drone control and video protocols.
+#
+# Note: This filter includes OUIs for DJI, Parrot, Yuneec, and Autel Robotics.
+#       You can add more vendor OUIs to this filter as needed.
+#
+# Usage:
+# hcxdumptool-launcher --bpf drone-recon
+#
+# Generated with:
+# hcxdumptool --bpfc="(wlan addr2 60:60:1f:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 a0:14:3d:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 e0:b6:f5:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 fc:a8:a3:00:00:00 mask ff:ff:ff:00:00:00)"
+
+13
+32 0 0 10
+21 0 8 1616928512
+21 0 7 2685694464
+21 0 6 3769976064
+21 0 5 4238914304
+21 0 4 2048
+32 0 0 4
+21 0 5 65535
+32 0 0 8
+21 0 3 65535
+21 0 2 2048
+6 0 0 65535
+6 0 0 0

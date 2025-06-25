@@ -1,0 +1,105 @@
+# Norwegian Police Force OUI BPF Filter
+#
+# Purpose: Captures traffic from any device whose MAC address OUI matches
+#          the provided list of vendors associated with various
+#          departments of the Norwegian police.
+#
+# Use Case: For authorized monitoring, auditing, or red team exercises
+#           to specifically identify and log traffic from these devices.
+#
+# IMPORTANT: This filter is based on the user-provided list. The accuracy
+#            of the detection is dependent on the accuracy of the list. MAC
+#            addresses can be spoofed, so this should be treated as a
+#            strong indicator, not definitive proof.
+#
+# OUIs Included in this Filter:
+# 00:13:CB - Politiet - Zenitel Intercom
+# 00:1E:96 - Politiet/PST - Sepura Radio
+# 00:15:77 - Police Network Infra - Allied Telesis Switch
+# 00:40:8C - Police Surveillance - Axis Legacy Camera
+# AC:CC:8E - Police Surveillance - Axis Gen2 Camera
+# 00:0D:5C - Police Surveillance - Bosch Camera
+# 64:70:02 - PST/Police Covert - Hikvision Camera
+# 44:19:B6 - PST/Police Covert - Hikvision Device
+# 18:E8:29 - Police Field Mesh - Ubiquiti
+# 88:15:44 - Police Cloud AP - Meraki
+# 00:1A:1E - Kripos/PST HP Workstation
+# 18:64:72 - Kripos/PST Aruba AP
+# 00:A0:98 - Kripos Forensic Storage - NetApp
+# 00:14:22 - Kripos/POD Dell Workstation
+# F8:4E:73 - Emergency/Nødnett Terminal
+# 00:0E:8E - Emergency/Nødnett Handset
+# 00:11:22 - Emergency Mobile Command Unit
+#
+# Usage:
+# hcxdumptool-launcher --bpf norwegian-police
+#
+# Generated with a long OR chain, e.g.,
+# hcxdumptool --bpfc="(wlan addr2 00:13:cb:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 00:1e:96:00:00:00 mask ff:ff:ff:00:00:00) or ..."
+
+65
+32 0 0 10
+21 0 62 1362816
+21 0 61 2004352
+21 0 60 1406592
+21 0 59 4232448
+21 0 58 2854379776
+21 0 57 875840
+21 0 56 16847874
+21 0 55 4503718
+21 0 54 2439587
+21 0 53 2269553152
+21 0 52 1708830
+21 0 51 2400370
+21 0 50 1050248
+21 0 49 1319458
+21 0 48 4124316928
+21 0 47 954094
+21 0 46 1122850
+21 0 45 2048
+32 0 0 4
+21 0 43 65535
+32 0 0 8
+21 0 41 65535
+21 0 40 2048
+32 0 0 4
+21 0 38 65535
+32 0 0 8
+21 0 36 65535
+21 0 35 2048
+32 0 0 4
+21 0 33 65535
+32 0 0 8
+21 0 31 65535
+21 0 30 2048
+32 0 0 4
+21 0 28 65535
+32 0 0 8
+21 0 26 65535
+21 0 25 2048
+32 0 0 4
+21 0 23 65535
+32 0 0 8
+21 0 21 65535
+21 0 20 2048
+32 0 0 4
+21 0 18 65535
+32 0 0 8
+21 0 16 65535
+21 0 15 2048
+32 0 0 4
+21 0 13 65535
+32 0 0 8
+21 0 11 65535
+21 0 10 2048
+32 0 0 4
+21 0 8 65535
+32 0 0 8
+21 0 6 65535
+21 0 5 2048
+32 0 0 4
+21 0 3 65535
+32 0 0 8
+21 0 1 65535
+6 0 0 65535
+6 0 0 0

@@ -1,0 +1,36 @@
+# Printers and Scanners BPF Filter
+#
+# Purpose: Isolates traffic from common network printer and scanner manufacturers.
+#
+# Use Case: Printers are often an overlooked and vulnerable part of a
+#           corporate network. This filter helps an attacker or auditor
+#           quickly find them to assess their security posture.
+#
+# Vendors Included: HP, Brother, Canon, Epson, Xerox.
+#
+# Usage:
+# hcxdumptool-launcher --bpf printers-and-scanners
+#
+# Generated with:
+# hcxdumptool --bpfc="(wlan addr2 3c:52:82:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 e8:93:09:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 00:00:85:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 00:00:c5:00:00:00 mask ff:ff:ff:00:00:00) or (wlan addr2 00:00:aa:00:00:00 mask ff:ff:ff:00:00:00)"
+
+16
+32 0 0 10
+21 0 12 1010327296
+21 0 11 3897768192
+21 0 10 34816
+21 0 9 51456
+21 0 8 43520
+21 0 7 2048
+32 0 0 4
+21 0 6 65535
+32 0 0 8
+21 0 5 65535
+21 0 4 2048
+32 0 0 4
+21 0 3 65535
+32 0 0 8
+21 0 2 65535
+21 0 1 65535
+6 0 0 65535
+6 0 0 0

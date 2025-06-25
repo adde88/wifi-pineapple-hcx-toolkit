@@ -1,0 +1,22 @@
+# PMKID Harvest BPF Filter
+#
+# Purpose: Specifically targets frames that are most likely to initiate
+#          a PMKID exchange. It captures the client's request to join
+#          a network, which prompts a PMKID-capable AP to offer a PMKID.
+#
+# Use Case: Ideal for initial sweeps to gather as many crackable PMKIDs
+#           as possible with minimal capture file size.
+#
+# Usage:
+# hcxdumptool-launcher --bpf pmkid-harvest
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and (subtype assoc-req or subtype reassoc-req)"
+
+6
+48 0 0 0
+84 0 0 240
+21 0 3 0
+21 0 2 32
+6 0 0 65535
+6 0 0 0

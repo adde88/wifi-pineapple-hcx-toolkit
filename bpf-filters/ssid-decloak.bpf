@@ -1,0 +1,23 @@
+# SSID De-cloaking and Reconnaissance BPF Filter
+#
+# Purpose: Captures both Probe Requests from clients and Probe Responses
+#          from Access Points. This provides a complete picture of network
+#          discovery traffic.
+#
+# Use Case: Ideal for quickly mapping out an area. It shows what networks
+#           clients are searching for and efficiently de-cloaks hidden SSIDs
+#           when an AP responds to a client's probe.
+#
+# Usage:
+# hcxdumptool-launcher --bpf ssid-decloak
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and (subtype probe-req or subtype probe-resp)"
+
+6
+48 0 0 0
+84 0 0 240
+21 0 3 64
+21 0 2 80
+6 0 0 65535
+6 0 0 0
