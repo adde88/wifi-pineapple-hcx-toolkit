@@ -3,14 +3,14 @@
 # HCX Advanced Analyzer - Masterpiece Edition
 # A comprehensive security analysis and reporting tool for HCX captures.
 # Part of the WiFi Pineapple HCX Toolkit
-# Version: 5.0.0
+# Version: 5.0.1
 
 #==============================================================================
 # INITIALIZATION & CONFIGURATION
 #==============================================================================
 
 # --- Script Version ---
-ANALYZER_VERSION="5.0.0"
+ANALYZER_VERSION="5.0.1"
 
 # --- System & Path Configuration ---
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then
@@ -64,13 +64,11 @@ show_usage() {
     echo ""
 }
 
-# Spinner function to provide visual feedback for long tasks
 run_with_spinner() {
     local cmd="$1"
     shift
     local args="$@"
     
-    # Spinner function runs in the background
     spinner() {
         local spinstr='|/-\\'
         while true; do
@@ -84,16 +82,12 @@ run_with_spinner() {
 
     spinner &
     local spinner_pid=$!
-    # Ensure spinner is killed on script exit
     trap "kill $spinner_pid 2>/dev/null; printf '\b\b\b\b\b     \b\b\b\b\b'; exit" INT TERM EXIT
 
-    # Run the actual command, hiding its output
     $cmd $args >/dev/null 2>&1
     
-    # Kill the spinner and clean up the line
     kill $spinner_pid 2>/dev/null
     printf "\b\b\b\b\b     \b\b\b\b\b"
-    # Disable the trap
     trap - INT TERM EXIT
 }
 
@@ -114,7 +108,7 @@ run_summary_analysis() {
     printf "Processing all files..."
     
     if [ "$VERBOSE" -eq 1 ]; then
-        printf "\n" # Add a newline for verbose output
+        printf "\n"
         hcxpcapngtool $files_to_process -o "$ALL_HASHES_FILE" -E "$TEMP_ESSID_FILE" -D "$TEMP_DEVICE_FILE"
     else
         run_with_spinner "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE" -E "$TEMP_ESSID_FILE" -D "$TEMP_DEVICE_FILE"
@@ -159,6 +153,7 @@ run_intel_analysis() {
     shift
     local files_to_process="$@"
     local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
+    local GROUPED_HASH_DIR="$ANALYSIS_DIR/grouped-hashes"
 
     echo -e "${CYAN}--- Running Intelligence Gathering ---${NC}"
     printf "Extracting hashes..."
@@ -177,10 +172,17 @@ run_intel_analysis() {
 
     echo -e "\n${BLUE}--- Hash Grouping for Efficient Cracking ---${NC}"
     echo "Grouping hashes by ESSID optimizes cracking performance by reusing PBKDF2 calculations."
-    echo "Grouped hash files will be saved to: $ANALYSIS_DIR/grouped-hashes/"
-    mkdir -p "$ANALYSIS_DIR/grouped-hashes"
+    echo "Grouped hash files will be saved to: $GROUPED_HASH_DIR/"
+    mkdir -p "$GROUPED_HASH_DIR"
+    
+    # --- FIX: Change to the output directory before creating grouped files ---
+    local current_dir
+    current_dir=$(pwd)
+    cd "$GROUPED_HASH_DIR" || exit
+    # Use absolute path for input file to ensure it's found
     hcxhashtool -i "$ALL_HASHES_FILE" --essid-group --oui-group -d >/dev/null 2>&1
-    mv ESSID-*.hc22000 OUI-*.hc22000 "$ANALYSIS_DIR/grouped-hashes/" 2>/dev/null
+    cd "$current_dir" || exit
+    
     echo -e "${GREEN}Grouping complete.${NC}"
 }
 
@@ -388,25 +390,22 @@ main() {
         fi
     done
 
-    # If no mode is specified via arguments, and it's not a help request, enter interactive mode
     if [ "$has_mode_arg" -eq 0 ] && [ "$1" != "-h" ] && [ "$1" != "--help" ]; then
         is_only_files=1
         for arg in "$@"; do
-            # If an argument is not a file or directory, it's not a simple file list run
             if [ -n "$arg" ] && [ ! -f "$arg" ] && [ ! -d "$arg" ]; then
                 is_only_files=0
                 break
             fi
         done
         if [ "$is_only_files" -eq 1 ] && [ $# -gt 0 ]; then
-            has_mode_arg=1 # Treat file list as a non-interactive run
+            has_mode_arg=1
         fi
     fi
     
     if [ "$has_mode_arg" -eq 0 ] && [ "$1" != "-h" ] && [ "$1" != "--help" ]; then
         run_interactive_mode
     else
-        # Normal argument parsing
         while [ $# -gt 0 ]; do
             case "$1" in
                 --mode) MODE="$2"; shift 2 ;;
