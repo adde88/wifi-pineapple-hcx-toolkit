@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # hcxdumptool-launcher - An advanced automation framework for hcxdumptool.
-# Version: 5.0.0
+# Version: 5.0.1
 # Author: Andreas Nilsen
 # Github: https://www.github.com/adde88
 #
@@ -9,7 +9,7 @@
 # https://github.com/adde88/openwrt-useful-tools
 
 #--- Script Information and Constants ---#
-readonly SCRIPT_VERSION="5.0.0"
+readonly SCRIPT_VERSION="5.0.1"
 readonly REQ_HCXDUMPTOOL_VER_STR="v21.02.0"
 readonly REQ_HCXTOOLS_VER_STR="6.2.7"
 readonly INSTALL_DIR="/etc/hcxtools"
@@ -50,6 +50,7 @@ WARDRIVING_LOOP=0
 #--- Runtime Variables ---#
 HCXDUMPTOOL_PID=0
 TEMP_FILE="/tmp/hcx_session_files_$$"
+START_TIME=0
 
 #==============================================================================
 # HELPER FUNCTIONS
@@ -186,6 +187,26 @@ install_script() {
     if [ -f "$script_dir/hcx-analyzer.sh" ]; then
         echo "Installing analyzer to $ANALYZER_BIN..."
         cp "$script_dir/hcx-analyzer.sh" "$ANALYZER_BIN" && chmod +x "$ANALYZER_BIN"
+    fi
+
+    if [ -f "$script_dir/hcxscript.conf" ]; then
+        echo "Installing configuration file to $CONFIG_FILE..."
+        cp "$script_dir/hcxscript.conf" "$CONFIG_FILE"
+    else
+        echo -e "${YELLOW}Warning: hcxscript.conf not found. Creating a default one.${NC}"
+        cat > "$CONFIG_FILE" << EOF
+# Default Configuration for HCX Toolkit
+# Settings here are overridden by command-line flags.
+# Uncomment lines by removing the '#' to activate them.
+
+# --- Remote Cracking Host Configuration ---
+#REMOTE_CRACK_ENABLED=0
+#REMOTE_USER="user"
+#REMOTE_HOST="192.168.1.100"
+#REMOTE_HASHCAT_PATH="/usr/bin/hashcat"
+#REMOTE_WORDLIST_PATH="/path/to/your/wordlist.txt"
+#REMOTE_CAPTURE_PATH="/home/user/hcx_captures"
+EOF
     fi
 
     echo "$SCRIPT_VERSION" > "$INSTALL_DIR/VERSION"
@@ -340,6 +361,19 @@ cleanup() {
     fi
     if [ -n "$HCXDUMPTOOL_PID" ]; then kill "$HCXDUMPTOOL_PID" 2>/dev/null; fi
     
+    # --- ADDITION: Calculate and display runtime ---
+    if [ "$START_TIME" -ne 0 ]; then
+        local END_TIME
+        END_TIME=$(date +%s)
+        local ELAPSED_SECONDS
+        ELAPSED_SECONDS=$((END_TIME - START_TIME))
+        local MINUTES
+        MINUTES=$((ELAPSED_SECONDS / 60))
+        local SECONDS
+        SECONDS=$((ELAPSED_SECONDS % 60))
+        echo -e "  - Total session runtime: ${MINUTES}m ${SECONDS}s."
+    fi
+    
     local SESSION_FILES
     SESSION_FILES=$(cat "$TEMP_FILE" 2>/dev/null)
     
@@ -367,7 +401,6 @@ cleanup() {
         fi
     fi
 
-    # --- FIX: Always restore to managed mode ---
     if [ "$RESTORE_INTERFACE" -eq 1 ]; then
         echo -e "${CYAN}Restoring interface '$INTERFACE' to managed mode...${NC}"
         ip link set "$INTERFACE" down 2>/dev/null
@@ -511,6 +544,10 @@ main() {
         fi
     fi
     >"$TEMP_FILE"
+    
+    # --- ADDITION: Record start time ---
+    START_TIME=$(date +%s)
+    
     run_main_workflow
 }
 
