@@ -1,4 +1,4 @@
-# WiFi Pineapple HCX Toolkit ??
+# WiFi Pineapple HCX Toolkit 🍍
 ### v5.0.0 - "The Masterpiece Edition"
 
 An advanced automation framework for `hcxdumptool` and `hcxtools` on the WiFi Pineapple MKVII and other OpenWrt devices. This toolkit transforms the powerful `hcx` binaries into a streamlined, user-friendly, and highly effective system for WiFi security assessments.
