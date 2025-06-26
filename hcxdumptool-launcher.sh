@@ -240,7 +240,11 @@ uninstall_script() {
 
 update_script() {
     echo -e "${BLUE}=== Checking for updates... ===${NC}"
-    REMOTE_VERSION=$(wget -qO- "$UPDATE_URL" | grep 'readonly SCRIPT_VERSION=' | cut -d'"' -f2)
+    # --- FIX: Clean up potential newlines and carriage returns from wget output ---
+    local remote_version_line
+    remote_version_line=$(wget -qO- "$UPDATE_URL" | grep 'readonly SCRIPT_VERSION=')
+    REMOTE_VERSION=$(echo "$remote_version_line" | cut -d'"' -f2 | tr -d '\n\r')
+
     if [ -z "$REMOTE_VERSION" ]; then
         echo -e "${RED}Error: Could not fetch remote version.${NC}"
         exit 1
@@ -361,7 +365,6 @@ cleanup() {
     fi
     if [ -n "$HCXDUMPTOOL_PID" ]; then kill "$HCXDUMPTOOL_PID" 2>/dev/null; fi
     
-    # --- ADDITION: Calculate and display runtime ---
     if [ "$START_TIME" -ne 0 ]; then
         local END_TIME
         END_TIME=$(date +%s)
@@ -545,7 +548,6 @@ main() {
     fi
     >"$TEMP_FILE"
     
-    # --- ADDITION: Record start time ---
     START_TIME=$(date +%s)
     
     run_main_workflow
