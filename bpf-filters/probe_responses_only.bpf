@@ -1,0 +1,18 @@
+# Probe Response Only BPF Filter
+#
+# Purpose: Captures only Probe Response frames. This is a very clean and
+#          efficient way to discover hidden SSIDs, as it only captures the
+#          AP's response when a client probes for the hidden network.
+#
+# Usage:
+# hcxdumptool-launcher --bpf probe-responses-only
+#
+# Generated with:
+# hcxdumptool --bpfc="type mgt and subtype probe-resp"
+
+4
+48 0 0 0
+84 0 0 240
+21 0 1 80
+6 0 0 65535
+6 0 0 0
