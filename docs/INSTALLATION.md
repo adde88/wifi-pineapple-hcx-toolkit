@@ -1,14 +1,15 @@
 # Installation Guide
 
-This guide provides step-by-step instructions for installing the WiFi Pineapple HCX Toolkit v5.0.0.
+This guide provides step-by-step instructions for installing the WiFi Pineapple HCX Toolkit v7.0.0.
 
 ## Prerequisites
 
 Before installing, please ensure your system meets the following requirements:
 
 * A WiFi Pineapple MKVII or other OpenWrt-based device.
-* **hcxdumptool-custom**: v6.3.4-2 or newer installed via `opkg`.
+* **hcxdumptool-custom**: v21.02.0 or newer installed via `opkg`.
 * **hcxtools-custom**: v6.2.7-1 or newer installed via `opkg`.
+* **hcxlabtool** (Optional): v7.0 or newer for the advanced attack backend.
 * **git**: The `git` package must be installed (`opkg update && opkg install git`).
 * Root access to the device.
 
@@ -32,4 +33,12 @@ Before installing, please ensure your system meets the following requirements:
     ```bash
     hcxdumptool-launcher --version
     ```
-    This should display the correct version number. The toolkit is now installed and ready to use.
+    This should display `v7.0.0` or newer. The toolkit is now installed and ready to use.
+
+## Post-Installation: Performance Tuning (Recommended)
+
+This toolkit includes a high-performance wireless configuration that can dramatically increase capture rates. It is highly recommended for all users.
+
+To activate it, run the following command and **carefully read and follow the on-screen instructions**, which require manual steps and a reboot.
+```bash
+hcxdumptool-launcher --optimize-performance

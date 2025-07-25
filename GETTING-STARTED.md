@@ -21,11 +21,20 @@ First, you need to install the toolkit and its dependencies on your WiFi Pineapp
     ```bash
     ./hcxdumptool-launcher.sh --install
     ```
+    Follow any on-screen instructions that appear after installation.
 
 ## 2. Your First Capture
 
-The easiest way to start is with a simple survey scan to see what networks are around you without performing any attacks.
+The best way to start is by actively hunting for handshakes. This command will use the default `hcxdumptool` backend to deauthenticate clients and capture WPA handshakes for 5 minutes (300 seconds).
 
 ```bash
-# Run a survey scan using your wireless interface (e.g., wlan2)
-hcxdumptool-launcher -i wlan2 --survey
+# Run a handshake hunt using your wireless interface (e.g., wlan2) for 300 seconds
+hcxdumptool-launcher -i wlan2 --hunt-handshakes -d 300  
+
+## 3. Analyzing your capture  
+Once your capture is complete, you can use the powerful ```hcx-analyzer.sh``` script to investigate your findings. The easiest way to start is by launching its interactive menu.  
+1. **Run the Analyzer:** Simply execute the script with no arguments.  
+```bash
+hcx-analyzer.sh
+```
+2. **Choose a Mode:** An interactive menu will appear, giving you local and remote analysis options. For a first look, select the local ```summary``` option. The analyzer will automatically find your latest capture file and give you a report on the networks, devices, and potential hashes you collected.
