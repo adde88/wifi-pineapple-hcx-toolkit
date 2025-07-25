@@ -9,12 +9,19 @@ This guide covers common issues and solutions when using the WiFi Pineapple HCX 
 
 ## Capture Issues
 
+### Q: I ran `--optimize-performance`, but my capture rate didn't improve.
+**A:** The `--optimize-performance` command only copies the configuration file into place; it does not automatically apply it. This is a safety measure. You **must** follow the manual steps displayed on-screen after running the command:
+1.  **Edit the file**: Manually open `/etc/config/wireless` and set a new, secure password for the `MK7-ADMIN` network.
+2.  **Commit the changes**: Run the command `uci commit wireless`.
+3.  **Reboot**: Run the command `reboot`. The performance improvements will only take effect after a full reboot.
+
 ### Q: The script runs, but my capture file is empty or no handshakes are found.
 **A:** This is a common issue with several potential causes.
 
-1.  **Environment**: There may be no vulnerable handshakes or active clients nearby. Try moving to a busier location for testing.
-2.  **Wrong Channels**: You may be scanning channels with no activity. Try focusing on the most common channels, like `-c 1,6,11`.
-3.  **Distance**: You may be too far from the target. Physical proximity is key for successful capture.
+1.  **Performance Configuration**: If you have not yet run `--optimize-performance`, you are likely missing a significant number of potential captures. This is the most common reason for poor results.
+2.  **Environment**: There may be no vulnerable handshakes or active clients nearby. Try moving to a busier location for testing.
+3.  **Wrong Channels**: You may be scanning channels with no activity. Try focusing on the most common channels, like `-c 1,6,11`.
+4.  **Distance**: You may be too far from the target. Physical proximity is key for successful capture.
 
 ### Q: The script exits immediately with a "Killed" message.
 **A:** This almost always means your device has run out of memory.

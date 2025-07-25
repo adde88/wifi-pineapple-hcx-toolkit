@@ -20,6 +20,8 @@ readonly INSTALL_BIN="/usr/bin/hcxdumptool-launcher"
 readonly ANALYZER_BIN="/usr/bin/hcx-analyzer.sh"
 readonly UPDATE_URL="https://raw.githubusercontent.com/adde88/wifi-pineapple-hcx-toolkit/main/hcxdumptool-launcher.sh"
 readonly VERSION_FILE="$INSTALL_DIR/VERSION"
+readonly WIRELESS_CONFIG_OPTIMIZED="$INSTALL_DIR/wireless.optimized"
+readonly WIRELESS_CONFIG_BACKUP="/etc/config/wireless.hcx-backup"
 
 # --- Dynamically read script version ---
 if [ -f "$VERSION_FILE" ]; then
@@ -129,6 +131,8 @@ usage() {
     echo "  --install              Install script and all components."
     echo "  --uninstall            Remove the toolkit and all related files."
     echo "  --update               Check for and install updates to the toolkit."
+    echo "  --optimize-performance Apply the high-performance wireless configuration."
+    echo "  --restore-config       Restore the original wireless configuration."
     echo "  --profile <name>       Load a configuration profile."
     echo "  --list-profiles        List available configuration profiles."
     echo "  --list-filters         List available BPF filter files."
@@ -362,13 +366,161 @@ install_script() {
 EOF
     fi
 
+    echo "Creating high-performance wireless config template..."
+    cat > "$WIRELESS_CONFIG_OPTIMIZED" << 'EOF'
+config wifi-device 'radio0'
+    option type 'mac80211'
+    option path 'platform/10300000.wmac'
+    option band '2g'
+    option channel '11'
+    option htmode 'HT20'
+    option cell_density '0'
+    option disabled '0'
+    option country 'GY'
+    option txpower '30'
+
+config wifi-iface
+    option device 'radio0'
+    option ifname 'wlan0'
+    option network 'lan'
+    option mode 'ap'
+    option ssid 'Guest'
+    option mac '00:C3:C9:44:A7:29'
+    option encryption 'owe'
+    option isolate '0'
+    option wmm '1'
+    option hidden '0'
+    option disabled '0'
+    option disassoc_low_ack '0'
+    option beacon_int '50'
+    option ap_max_inactivity '300'
+    option ieee80211k '1'
+    option ieee80211v '1'
+    option bss_transition '1'
+    option time_advertisement '2'
+    option time_zone 'CET-1CEST,M3.5.0,M10.5.0/3'
+
+config wifi-iface
+    option device 'radio0'
+    option ifname 'wlan0-1'
+    option network 'lan'
+    option mode 'ap'
+    option ssid 'MK7-ADMIN'
+    option mac 'AB:09:D0:DD:3B:AA'
+    option encryption 'sae-mixed'
+    option key 'SETYOURADMINPASSWORDHERE'
+    option ieee80211r '1'
+    option mobility_domain 'a1b2'
+    option hidden '0'
+    option isolate '0'
+    option wmm '1'
+    option disabled '0'
+    option disassoc_low_ack '0'
+    option beacon_int '50'
+
+config wifi-iface
+    option device 'radio0'
+    option ifname 'wlan0-2'
+    option network 'lan'
+    option mode 'ap'
+    option ssid 'PineyEnterprise'
+    option mac '00:1A:2B:3C:4D:55'
+    option encryption 'wpa2+eap'
+    option server '127.0.0.1'
+    option key 'i_god_damn_love_pineapples'
+    option hidden '0'
+    option disabled '1'
+    option isolate '0'
+    option wmm '1'
+    option disassoc_low_ack '0'
+    option beacon_int '50'
+
+config wifi-iface
+    option device 'radio0'
+    option ifname 'wlan0-3'
+    option network 'lan'
+    option mode 'ap'
+    option ssid 'TwinAP'
+    option mac '74:3A:EF:00:FF:11'
+    option encryption 'owe'
+    option isolate '0'
+    option wmm '1'
+    option disabled '0'
+    option hidden '0'
+    option disassoc_low_ack '0'
+    option beacon_int '50'
+    option ieee80211k '1'
+    option ieee80211v '1'
+    option bss_transition '1'
+
+config wifi-device 'radio1'
+    option type 'mac80211'
+    option path 'platform/101c0000.ehci/usb1/1-1/1-1.1/1-1.1:1.0'
+    option band '2g'
+    option channel '6'
+    option htmode 'HT20'
+    option country 'GY'
+    option txpower '30'
+    option cell_density '0'
+    option disabled '0'
+
+config wifi-iface
+    option device 'radio1'
+    option ifname 'wlan1'
+    option mode 'monitor'
+    option network 'wan'
+    option mac 'A0:AD:9F:00:FE:00'
+    option disabled '0'
+
+config wifi-device 'radio2'
+    option type 'mac80211'
+    option path 'platform/101c0000.ehci/usb1/1-1/1-1.2/1-1.2:1.0'
+    option band '2g'
+    option channel '1'
+    option htmode 'HT20'
+    option country 'GY'
+    option txpower '30'
+    option cell_density '0'
+    option disabled '0'
+    option country_ie '1'
+
+config wifi-iface
+    option device 'radio2'
+    option ifname 'wlan2'
+    option network 'wcli'
+    option mode 'sta'
+    option mac 'A0:AD:9F:01:FD:33'
+    option disabled '0'
+EOF
+
     echo "7.0.0" > "$VERSION_FILE"
     touch "$LOG_FILE"
-    echo -e "${GREEN}Installation complete! Run 'hcxdumptool-launcher' and 'hcx-analyzer.sh' from anywhere.${NC}"
+    echo -e "${GREEN}Installation complete!${NC}"
+    
+    echo -e "\n${YELLOW}####################### POST-INSTALL ACTION REQUIRED #######################${NC}"
+    echo -e "${CYAN}This toolkit includes a high-performance wireless configuration that can${NC}"
+    echo -e "${CYAN}increase capture rates by over 450%%.${NC}"
+    echo
+    echo -e "To activate it, run the following command:"
+    echo -e "${GREEN}hcxdumptool-launcher --optimize-performance${NC}"
+    echo
+    echo -e "${RED}WARNING:${NC} This will replace your current wireless settings. A backup will"
+    echo -e "be created, and you will be given instructions on how to proceed."
+    echo -e "${YELLOW}############################################################################${NC}"
 }
 
 uninstall_script() {
     echo -e "${YELLOW}--- HCX Toolkit Uninstaller ---${NC}"
+    
+    if [ -f "$WIRELESS_CONFIG_BACKUP" ]; then
+        echo -e "${YELLOW}A backup of your original wireless configuration was found.${NC}"
+        printf "Do you want to restore it now? [y/N] "
+        read -r restore_response
+        if [ "$restore_response" = "y" ] || [ "$restore_response" = "Y" ]; then
+            restore_performance_config
+        fi
+    fi
+
     echo -e "${RED}WARNING: This will permanently remove the following:${NC}"
     echo " - $INSTALL_BIN"
     echo " - $ANALYZER_BIN"
@@ -394,7 +546,7 @@ uninstall_script() {
 update_script() {
     echo -e "${BLUE}=== Checking for updates... ===${NC}"
     local remote_version_line
-    remote_version_line=$(wget -qO- "$UPDATE_URL" | grep 'SCRIPT_VERSION="')
+    remote_version_line=$(wget -qO- "$UPDATE_URL" | grep 'SCRIPT_VERSION=')
     REMOTE_VERSION=$(echo "$remote_version_line" | cut -d'"' -f2 | tr -d '\n\r')
 
     if [ -z "$REMOTE_VERSION" ]; then
@@ -410,6 +562,68 @@ update_script() {
         echo "$REMOTE_VERSION" > "$VERSION_FILE"
         echo -e "${GREEN}Update complete!${NC}"
     fi
+}
+
+optimize_performance() {
+    echo -e "${CYAN}--- Applying High-Performance Wireless Configuration ---${NC}"
+    if [ ! -f "$WIRELESS_CONFIG_OPTIMIZED" ]; then
+        echo -e "${RED}Error: Optimized configuration template not found.${NC}"
+        echo "Please run the installer to create it."
+        exit 1
+    fi
+    
+    if [ ! -f "$WIRELESS_CONFIG_BACKUP" ]; then
+        echo "Backing up current configuration to $WIRELESS_CONFIG_BACKUP..."
+        cp /etc/config/wireless "$WIRELESS_CONFIG_BACKUP"
+    else
+        echo -e "${YELLOW}Backup file already exists. Skipping backup.${NC}"
+    fi
+
+    echo "Applying optimized configuration..."
+    cp "$WIRELESS_CONFIG_OPTIMIZED" /etc/config/wireless
+    
+    echo -e "\n${RED}############################################################################${NC}"
+    echo -e "${RED}  ACTION REQUIRED: MANUAL CONFIGURATION AND REBOOT NEEDED!${NC}"
+    echo -e "${RED}############################################################################${NC}"
+    echo -e "${YELLOW}The high-performance wireless configuration has been copied into place.${NC}"
+    echo
+    echo -e "1. ${RED}!! IMMEDIATE SECURITY RISK !!${NC}"
+    echo -e "   The new configuration has a ${YELLOW}DEFAULT PASSWORD${NC} for the 'MK7-ADMIN' network."
+    echo -e "   You ${RED}MUST${NC} change this password now."
+    echo -e "   - ${CYAN}EDIT THE FILE:${NC} /etc/config/wireless"
+    echo -e "   - ${CYAN}FIND THE LINE:${NC} option key 'SETYOURADMINPASSWORDHERE'"
+    echo -e "   - ${CYAN}CHANGE THE PASSWORD${NC} to a secure one."
+    echo
+    echo -e "2. ${YELLOW}!! APPLY CHANGES & REBOOT !!${NC}"
+    echo -e "   To ensure these deep hardware changes are applied correctly, you must"
+    echo -e "   commit the changes and then ${YELLOW}REBOOT${NC} your device."
+    echo
+    echo -e "   Run these two commands now:"
+    echo -e "   ${GREEN}uci commit wireless${NC}"
+    echo -e "   ${GREEN}reboot${NC}"
+    echo
+    echo -e "To revert these changes at any time, run:"
+    echo -e "${CYAN}hcxdumptool-launcher --restore-config${NC}"
+    echo -e "${RED}############################################################################${NC}"
+}
+
+restore_performance_config() {
+    echo -e "${CYAN}--- Restoring Original Wireless Configuration ---${NC}"
+    if [ ! -f "$WIRELESS_CONFIG_BACKUP" ]; then
+        echo -e "${RED}Error: No backup file found at $WIRELESS_CONFIG_BACKUP.${NC}"
+        echo "Cannot restore."
+        exit 1
+    fi
+
+    echo "Restoring from $WIRELESS_CONFIG_BACKUP..."
+    cp "$WIRELESS_CONFIG_BACKUP" /etc/config/wireless
+
+    echo "Committing changes and reloading WiFi..."
+    uci commit wireless
+    wifi reload
+
+    echo -e "${GREEN}Original wireless configuration has been restored.${NC}"
+    echo -e "${YELLOW}A reboot may be required for all changes to take effect.${NC}"
 }
 
 pre_flight_checks() {
@@ -609,6 +823,8 @@ main() {
             --install) install_script; exit 0;;
             --uninstall) uninstall_script; exit 0;;
             --update) update_script; exit 0;;
+            --optimize-performance) optimize_performance; exit 0;;
+            --restore-config) restore_performance_config; exit 0;;
             --list-profiles) list_profiles; exit 0;;
             --list-filters) list_filters; exit 0;;
             --profile) load_profile "$2"; shift 2;;

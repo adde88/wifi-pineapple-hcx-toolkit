@@ -20,6 +20,7 @@ else
 fi
 
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then
+    # shellcheck source=/dev/null
     . "/etc/hcxtools/hcxscript.conf"
 fi
 
