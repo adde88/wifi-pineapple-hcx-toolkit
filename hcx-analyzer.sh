@@ -1,460 +1,637 @@
 #!/bin/sh
 #
-# HCX Advanced Analyzer - Masterpiece Edition
-# A comprehensive security analysis and reporting tool for HCX captures.
-# Part of the WiFi Pineapple HCX Toolkit
-# Version: 5.0.1
+# HCX Advanced Analyzer
+#
+# (C) 2025 Andreas Nilsen. All rights reserved.
 
 #==============================================================================
 # INITIALIZATION & CONFIGURATION
 #==============================================================================
 
-# --- Script Version ---
-ANALYZER_VERSION="5.0.1"
-
 # --- System & Path Configuration ---
+readonly INSTALL_DIR="/etc/hcxtools"
+readonly VERSION_FILE="$INSTALL_DIR/VERSION"
+
+# --- Dynamically read script version ---
+if [ -f "$VERSION_FILE" ]; then
+    ANALYZER_VERSION=$(cat "$VERSION_FILE")" \"Hydra\""
+else
+    ANALYZER_VERSION="7.0.0 \"Hydra\"" # Fallback for standalone execution
+fi
+
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then
     . "/etc/hcxtools/hcxscript.conf"
 fi
+
+# --- Local Paths ---
 CAPTURE_DIR=${OUTPUT_DIR:-"/root/hcxdumps"}
 ANALYSIS_DIR="/root/hcx-analysis"
+DB_DIR="/root/hcxdump"
+DB_FILE="$DB_DIR/database.db"
 mkdir -p "$ANALYSIS_DIR"
+mkdir -p "$DB_DIR"
 
-# --- Set Defaults for Remote Cracking (if not set in conf) ---
-REMOTE_CRACK_ENABLED=${REMOTE_CRACK_ENABLED:-0}
-REMOTE_USER=${REMOTE_USER:-"user"}
-REMOTE_HOST=${REMOTE_HOST:-"192.168.1.100"}
+# --- UNIFIED REMOTE SERVER CONFIGURATION ---
+REMOTE_SERVER_ENABLED=${REMOTE_ANALYSIS_ENABLED:-1}
+REMOTE_SERVER_HOST=${REMOTE_HOST:-"192.168.1.20"}
+REMOTE_SERVER_USER=${REMOTE_USER:-"root"}
+
+# Correctly determine home directory for root vs. other users
+if [ "$REMOTE_SERVER_USER" = "root" ]; then
+    REMOTE_SERVER_BASE_PATH="/root"
+else
+    REMOTE_SERVER_BASE_PATH="/home/${REMOTE_SERVER_USER}"
+fi
+REMOTE_SERVER_TMP_PATH="${REMOTE_SERVER_BASE_PATH}/hcx_analysis_temp"
+REMOTE_CAPTURE_PATH="${REMOTE_SERVER_BASE_PATH}/hcx_captures"
+
+
+# --- Remote Cracking Specifics ---
 REMOTE_HASHCAT_PATH=${REMOTE_HASHCAT_PATH:-"/usr/bin/hashcat"}
-REMOTE_WORDLIST_PATH=${REMOTE_WORDLIST_PATH:-"/path/to/your/wordlist.txt"}
-REMOTE_CAPTURE_PATH=${REMOTE_CAPTURE_PATH:-"/home/user/hcx_captures"}
+REMOTE_WORDLIST_PATH=${REMOTE_WORDLIST_PATH:-"/usr/share/wordlists/rockyou.txt"}
+
+# --- Remote DB Specifics ---
+DB_HOST=${DB_HOST:-"127.0.0.1"}
+DB_USER=${DB_USER:-"root"}
+DB_PASS=${DB_PASS:-""}
+DB_NAME=${DB_NAME:-"hcx_toolkit"}
 
 # --- Colors ---
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BLUE='\033[0;34m'; RED='\033[0;31m'; NC='\033[0m'
 
-# --- Script Defaults ---
-MODE="summary"
-SUMMARY_MODE="deep"
+# --- Script State Variables ---
+MODE=""
+UTILITY_ACTION=""
+REMOTE_ACTION=0
 VERBOSE=0
+SUMMARY_MODE="deep"
+MAC_LIST=""
+MAC_SKIPLIST=""
+ESSID_FILTER=""
+VENDOR_FILTER=""
+ESSID_MIN_LEN=""
+ESSID_MAX_LEN=""
+HASH_TYPE=""
+ESSID_REGEX=""
+AUTHORIZED_ONLY=0
+CHALLENGE_ONLY=0
 
 #==============================================================================
-# HELPER FUNCTIONS
+# HELPER & CORE FUNCTIONS
 #==============================================================================
 
 show_usage() {
-    echo "HCX Advanced Analyzer v$ANALYZER_VERSION"
-    echo "Usage: $0 [options] [file/dir1] [file/dir2] ..."
-    echo ""
-    echo "Analyzes .pcapng files from given paths, or from the default directory: $CAPTURE_DIR"
-    echo "If run without mode options, an interactive menu will be shown."
-    echo ""
-    echo "Options:"
-    echo "  --mode <mode>         Analysis mode. Default: summary."
-    echo "                        - summary: Overview of hashes, networks, and devices."
-    echo "                        - intel: Deep intelligence gathering (vendors, hash grouping)."
-    echo "                        - vuln: Hunt for weak passwords and known vulnerabilities."
-    echo "                        - export: Convert data for use in other tools."
-    echo "                        - geotrack: Extract and save GPS data from captures."
-    echo "                        - remote-crack: Offload hash file for cracking. See notes below."
-    echo "  --summary-mode <type> Select summary type (quick|deep). Default: deep."
-    echo "  -v, --verbose         Enable verbose output for debugging."
-    echo "  -h, --help            Show this help message."
-    echo ""
-    echo -e "${YELLOW}Remote Crack Note:${NC} The remote-crack feature requires configuration."
-    echo -e "Edit ${CYAN}/etc/hcxtools/hcxscript.conf${NC} to set your remote host, user, and paths."
-    echo ""
+    printf "%b\n" "${GREEN}HCX Advanced Analyzer v$ANALYZER_VERSION${NC}"
+    printf "%b\n" "by: ${YELLOW}Andreas Nilsen <adde88@gmail.com>${NC}"
+    printf "\n"
+    printf "Usage: %s [options] [file/dir1] ...\n" "$0"
+    printf "\n"
+    printf "%b\n" "${CYAN}--- LOCAL EXECUTION MODES ---${NC}"
+    printf "  ${GREEN}--mode <name>${NC}            Run a primary analysis task locally. Options:\n"
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "summary" "Quick overview of captures and hashes."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "intel" "Deep-dive into device vendors and relationships."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "vuln" "Hunt for known default passwords and weak points."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "pii" "Scan for Personally Identifiable Information (usernames/identities)."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "db" "Log all findings to a local SQLite database file."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "interactive" "Launch the guided menu for local operations."
+    printf "\n"
+    printf "%b\n" "${CYAN}--- REMOTE EXECUTION MODES ---${NC}"
+    printf "  ${GREEN}--remote-mode <name>${NC}    Offload a primary analysis task to the remote server. Options:\n"
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "summary" "Run a quick overview on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "intel" "Run a deep-dive analysis on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "vuln" "Hunt for vulnerabilities on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "pii" "Run PII scan on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "db" "Analyze remotely, then update the LOCAL SQLite DB."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "mysql" "Analyze remotely and update a remote MySQL DB."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "interactive" "Run the interactive menu on the remote server."
+    printf "\n"
+    printf "%b\n" "${CYAN}--- UTILITY MODES (LOCAL) ---${NC}"
+    printf "  ${GREEN}--utility <name>${NC}        Run a local utility task. Options:\n"
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "filter_hashes" "Create a new hash file based on specific criteria."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "generate_wordlist" "Build a custom wordlist from captured network names."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "merge_hashes" "Combine multiple .hc22000 files into one."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "export" "Convert data to other formats like .csv or .cap."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "geotrack" "Create a KML map file from GPS data."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "remote_crack" "Offload cracking session to a remote Hashcat server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "health_check" "Verify hcxtools versions and dependencies."
+    printf "\n"
+    printf "%b\n" "${CYAN}--- UTILITY MODES (REMOTE) ---${NC}"
+    printf "  ${GREEN}--remote-utility <name>${NC} Offload a utility task. Options:\n"
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "filter_hashes" "Filter hashes on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "generate_wordlist" "Generate wordlist on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "merge_hashes" "Merge hash files on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "export" "Export to CSV/CAP on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "geotrack" "Generate KML file on the remote server."
+    printf "\n"
+    printf "%b\n" "${CYAN}--- ADVANCED FILTERING OPTIONS (for filter_hashes mode) ---${NC}"
+    printf "  ${GREEN}--essid-min <len>${NC}       Filter hashes with ESSID length >= len.\n"
+    printf "  ${GREEN}--essid-max <len>${NC}       Filter hashes with ESSID length <= len.\n"
+    printf "  ${GREEN}--essid-regex <RGX>${NC}     Filter hashes with ESSID matching a regex.\n"
+    printf "  ${GREEN}--type <1|2|3>${NC}          Filter by hash type (1=PMKID, 2=EAPOL, 3=Both).\n"
+    printf "  ${GREEN}--authorized${NC}            Keep only fully authorized handshakes.\n"
+    printf "  ${GREEN}--challenge${NC}             Keep only challenge/response handshakes.\n"
+    printf "\n"
+    printf "%b\n" "${CYAN}--- OTHER OPTIONS ---${NC}"
+    printf "  ${GREEN}--remote-host <host>${NC}    Specify remote server IP or hostname.\n"
+    printf "  ${GREEN}--summary-mode <type>${NC}   For summary mode: quick|deep (Default: deep).\n"
+    printf "  ${GREEN}--mac-list <file>${NC}       Whitelist MACs for hash filtering.\n"
+    printf "  ${GREEN}--mac-skiplist <file>${NC}   Blacklist MACs for hash filtering.\n"
+    printf "  ${GREEN}--essid <ESSID>${NC}         Filter by a specific ESSID.\n"
+    printf "  ${GREEN}--vendor <string>${NC}       Filter by a vendor name string.\n"
+    printf "  ${GREEN}-v, --verbose${NC}           Enable verbose output for debugging.\n"
+    printf "  ${GREEN}-h, --help${NC}              Show this help message.\n"
+    printf "\n"
+}
+
+sanitize_arg() {
+    echo "$1" | sed "s/'/'\\\\''/g"
 }
 
 run_with_spinner() {
-    local cmd="$1"
-    shift
-    local args="$@"
-    
+    local message="$1"; local cmd="$2"; shift 2; local args="$@"
+    printf "%s" "$message"
     spinner() {
         local spinstr='|/-\\'
-        while true; do
-            local temp=${spinstr#?}
-            printf " [%c] " "$spinstr"
-            spinstr=$temp${spinstr%"$temp"}
-            sleep 0.1
-            printf "\b\b\b\b\b"
-        done
+        while true; do local temp=${spinstr#?}; printf " [%c] " "$spinstr"; spinstr=$temp${spinstr%"$temp"}; sleep 0.1; printf "\b\b\b\b\b"; done
     }
-
     spinner &
     local spinner_pid=$!
     trap "kill $spinner_pid 2>/dev/null; printf '\b\b\b\b\b     \b\b\b\b\b'; exit" INT TERM EXIT
-
-    $cmd $args >/dev/null 2>&1
-    
-    kill $spinner_pid 2>/dev/null
-    printf "\b\b\b\b\b     \b\b\b\b\b"
-    trap - INT TERM EXIT
+    if [ "$VERBOSE" -eq 1 ]; then printf "\n"; eval "$cmd $args"; else eval "$cmd $args" >/dev/null 2>&1; fi
+    local exit_code=$?
+    kill $spinner_pid 2>/dev/null; printf "\b\b\b\b\b     \b\b\b\b\b"; trap - INT TERM EXIT
+    if [ $exit_code -eq 0 ]; then printf "${GREEN}Done.${NC}\n"; else printf "${RED}Failed.${NC}\n"; fi
+    return $exit_code
 }
 
 #==============================================================================
-# ANALYSIS CORE
+# ANALYSIS & UTILITY FUNCTIONS
 #==============================================================================
 
-run_summary_analysis() {
+run_summary() {
     shift
     local files_to_process="$@"
-    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
-    local TEMP_ESSID_FILE="/tmp/analyzer_essids.tmp"
-    local TEMP_DEVICE_FILE="/tmp/analyzer_devices.tmp"
-
-    >"$ALL_HASHES_FILE"; >"$TEMP_ESSID_FILE"; >"$TEMP_DEVICE_FILE"
-
-    echo -e "${CYAN}--- Running Summary Analysis (Mode: $SUMMARY_MODE) ---${NC}"
-    printf "Processing all files..."
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
     
-    if [ "$VERBOSE" -eq 1 ]; then
-        printf "\n"
-        hcxpcapngtool $files_to_process -o "$ALL_HASHES_FILE" -E "$TEMP_ESSID_FILE" -D "$TEMP_DEVICE_FILE"
-    else
-        run_with_spinner "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE" -E "$TEMP_ESSID_FILE" -D "$TEMP_DEVICE_FILE"
-        printf " Done.\n"
-    fi
-
-    local TOTAL_HASHES=0; local PMKID_COUNT=0; local EAPOL_COUNT=0;
-    local ESSID_COUNT=0; local DEVICE_COUNT=0;
-    
+    run_with_spinner "Processing files..." "hcxpcapngtool" $files_to_process -o "$ANALYSIS_DIR/all_hashes.hc22000" -E "/tmp/analyzer_essids.tmp" -D "/tmp/analyzer_devices.tmp"
+    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"; local TEMP_ESSID_FILE="/tmp/analyzer_essids.tmp"; local TEMP_DEVICE_FILE="/tmp/analyzer_devices.tmp"
+    local TOTAL_HASHES=0; local PMKID_COUNT=0; local EAPOL_COUNT=0; local ESSID_COUNT=0; local DEVICE_COUNT=0
     if [ -s "$ALL_HASHES_FILE" ]; then
         if [ "$SUMMARY_MODE" = "deep" ]; then
-            TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE")
-            PMKID_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=1 2>/dev/null | wc -l)
-            EAPOL_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=2 2>/dev/null | wc -l)
+            TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE"); PMKID_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=1 2>/dev/null | wc -l); EAPOL_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=2 2>/dev/null | wc -l)
         else
-            TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE")
-            PMKID_COUNT="N/A (Quick Mode)"
-            EAPOL_COUNT="N/A (Quick Mode)"
+            TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE"); PMKID_COUNT="N/A (Quick Mode)"; EAPOL_COUNT="N/A (Quick Mode)"
         fi
     fi
     if [ -s "$TEMP_ESSID_FILE" ]; then ESSID_COUNT=$(sort -u "$TEMP_ESSID_FILE" | wc -l); fi
     if [ -s "$TEMP_DEVICE_FILE" ]; then DEVICE_COUNT=$(sort -u "$TEMP_DEVICE_FILE" | wc -l); fi
-
-    echo -e "\n${BLUE}--- Overall Summary ---${NC}"
-    echo -e "[*] Total Crackable Hashes:         ${GREEN}$TOTAL_HASHES${NC}"
+    printf "\n%b\n" "${BLUE}--- Overall Summary ---${NC}"
+    printf "%b\n" "[*] Total Crackable Hashes:         ${GREEN}$TOTAL_HASHES${NC}"
     if [ "$SUMMARY_MODE" = "deep" ]; then
-        echo -e "    - PMKIDs (AP-based):            ${YELLOW}$PMKID_COUNT${NC}"
-        echo -e "    - Handshakes (Client-based):    ${YELLOW}$EAPOL_COUNT${NC}"
+        printf "%b\n" "    - PMKIDs (AP-based):            ${YELLOW}$PMKID_COUNT${NC}"; printf "%b\n" "    - Handshakes (Client-based):    ${YELLOW}$EAPOL_COUNT${NC}"
     fi
-    echo -e "[*] Total Unique ESSIDs (Networks): ${GREEN}$ESSID_COUNT${NC}"
-    echo -e "[*] Total Unique Devices (MACs):    ${GREEN}$DEVICE_COUNT${NC}"
-    
-    if [ ! -s "$ALL_HASHES_FILE" ]; then
-        rm -f "$ALL_HASHES_FILE"
-    else
-        echo -e "\n${GREEN}All crackable hashes saved to: $ALL_HASHES_FILE${NC}"
-    fi
+    printf "%b\n" "[*] Total Unique ESSIDs (Networks): ${GREEN}$ESSID_COUNT${NC}"; printf "%b\n" "[*] Total Unique Devices (MACs):    ${GREEN}$DEVICE_COUNT${NC}"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then rm -f "$ALL_HASHES_FILE"; fi
     rm -f "$TEMP_ESSID_FILE" "$TEMP_DEVICE_FILE" 2>/dev/null
 }
 
-run_intel_analysis() {
+run_intel() {
     shift
     local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    
+    run_with_spinner "Extracting hashes..." "hcxpcapngtool" $files_to_process -o "$ANALYSIS_DIR/all_hashes.hc22000"
     local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
-    local GROUPED_HASH_DIR="$ANALYSIS_DIR/grouped-hashes"
-
-    echo -e "${CYAN}--- Running Intelligence Gathering ---${NC}"
-    printf "Extracting hashes..."
-    if [ "$VERBOSE" -eq 1 ]; then printf "\n"; hcxpcapngtool $files_to_process -o "$ALL_HASHES_FILE"; else run_with_spinner "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"; printf " Done.\n"; fi
-    
-    if [ ! -s "$ALL_HASHES_FILE" ]; then
-        echo -e "${YELLOW}No hashes found to analyze.${NC}"
-        return
-    fi
-    
-    echo -e "\n${BLUE}--- Hash Content Information ---${NC}"
-    hcxhashtool -i "$ALL_HASHES_FILE" --info=stdout
-    
-    echo -e "\n${BLUE}--- Discovered Device Vendors ---${NC}"
-    hcxhashtool -i "$ALL_HASHES_FILE" --info-vendor=stdout
-
-    echo -e "\n${BLUE}--- Hash Grouping for Efficient Cracking ---${NC}"
-    echo "Grouping hashes by ESSID optimizes cracking performance by reusing PBKDF2 calculations."
-    echo "Grouped hash files will be saved to: $GROUPED_HASH_DIR/"
-    mkdir -p "$GROUPED_HASH_DIR"
-    
-    # --- FIX: Change to the output directory before creating grouped files ---
-    local current_dir
-    current_dir=$(pwd)
-    cd "$GROUPED_HASH_DIR" || exit
-    # Use absolute path for input file to ensure it's found
-    hcxhashtool -i "$ALL_HASHES_FILE" --essid-group --oui-group -d >/dev/null 2>&1
-    cd "$current_dir" || exit
-    
-    echo -e "${GREEN}Grouping complete.${NC}"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No hashes found.${NC}"; return; fi
+    printf "\n%b\n" "${BLUE}--- Hash Content Information ---${NC}"; hcxhashtool -i "$ALL_HASHES_FILE" --info=stdout
+    printf "\n%b\n" "${BLUE}--- Discovered Device Vendors ---${NC}"; hcxhashtool -i "$ALL_HASHES_FILE" --info-vendor=stdout
+    printf "\n%b\n" "${BLUE}--- Hash Grouping for Efficient Cracking ---${NC}"
+    mkdir -p "$ANALYSIS_DIR/grouped-hashes"; local current_dir=$(pwd); cd "$ANALYSIS_DIR/grouped-hashes" || exit
+    run_with_spinner "Grouping hashes..." "hcxhashtool" -i "$ALL_HASHES_FILE" --essid-group --oui-group -d
+    cd "$current_dir" || exit; echo "Grouped hash files saved to: $ANALYSIS_DIR/grouped-hashes/"
 }
 
-run_vulnerability_analysis() {
+run_vuln() {
     shift
     local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    
     local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
-    local ALL_ESSIDS_FILE="$ANALYSIS_DIR/all_essids.txt"
-
-    echo -e "${CYAN}--- Running Vulnerability Analysis ---${NC}"
-    printf "Extracting hashes and ESSIDs..."
-    if [ "$VERBOSE" -eq 1 ]; then printf "\n"; hcxpcapngtool $files_to_process -o "$ALL_HASHES_FILE" -E "$ALL_ESSIDS_FILE"; else run_with_spinner "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE" -E "$ALL_ESSIDS_FILE"; printf " Done.\n"; fi
-
-    if [ ! -s "$ALL_HASHES_FILE" ]; then
-        echo -e "${YELLOW}No crackable hashes found. Cannot perform vulnerability analysis.${NC}"
-        return
-    fi
-
-    echo -e "\n${BLUE}--- Comprehensive Default Password Check ---${NC}"
-    echo "Testing against thousands of known default router passwords..."
-    hcxpsktool -c "$ALL_HASHES_FILE" --netgear --spectrum --weakpass --digit10 --phome --tenda --ee --alticeoptimum --asus | tee "$ANALYSIS_DIR/cracked_by_defaults.txt"
-
-    echo -e "\n${BLUE}--- ESSID-based Wordlist Generation ---${NC}"
-    echo "Generating potential passwords based on captured network names..."
-    local CANDIDATE_WORDLIST="$ANALYSIS_DIR/essid_based_wordlist.txt"
-    if [ "$VERBOSE" -eq 1 ]; then hcxeiutool -i "$ALL_ESSIDS_FILE" -s "$CANDIDATE_WORDLIST"; else hcxeiutool -i "$ALL_ESSIDS_FILE" -s "$CANDIDATE_WORDLIST" >/dev/null 2>&1; fi
-    if [ -s "$CANDIDATE_WORDLIST" ]; then
-        echo "Candidate wordlist saved to: $CANDIDATE_WORDLIST"
-        echo -e "Use this file with hashcat on a powerful machine, or with the 'remote-crack' mode."
-    else
-        echo "No candidate passwords could be generated from ESSIDs."
-    fi
-
-    echo -e "\n${BLUE}--- AP-Less (Client-Only) Attack Candidates ---${NC}"
+    run_with_spinner "Extracting data..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE" -E "$ANALYSIS_DIR/all_essids.txt"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No crackable hashes found.${NC}"; return; fi
+    printf "\n%b\n" "${BLUE}--- Comprehensive Default Password Check ---${NC}"
+    hcxpsktool -c "$ALL_HASHES_FILE" --netgear --spectrum --weakpass --digit10 --phome --tenda --ee --alticeoptimum --asus --eudate --usdate --wpskeys | tee "$ANALYSIS_DIR/cracked_by_defaults.txt"
+    printf "\n%b\n" "${BLUE}--- AP-Less (Client-Only) Attack Candidates ---${NC}"
     hcxhashtool -i "$ALL_HASHES_FILE" --apless -o "$ANALYSIS_DIR/apless_targets.hc22000"
-    if [ -s "$ANALYSIS_DIR/apless_targets.hc22000" ]; then
-        echo "Targets vulnerable to AP-less attacks saved to: $ANALYSIS_DIR/apless_targets.hc22000"
-    else
-        echo "No AP-less attack targets found."
-        rm -f "$ANALYSIS_DIR/apless_targets.hc22000" 2>/dev/null
-    fi
-
-    echo -e "\n${BLUE}--- Legacy Protocol Scan ---${NC}"
-    if [ "$VERBOSE" -eq 1 ]; then hcxpcapngtool $files_to_process --eapmd5="$ANALYSIS_DIR/eap-md5.hash" --eapleap="$ANALYSIS_DIR/eap-leap.hash"; else hcxpcapngtool $files_to_process --eapmd5="$ANALYSIS_DIR/eap-md5.hash" --eapleap="$ANALYSIS_DIR/eap-leap.hash" >/dev/null 2>&1; fi
-    if [ -s "$ANALYSIS_DIR/eap-md5.hash" ]; then echo -e "${YELLOW}Vulnerable EAP-MD5 hashes found! Saved to eap-md5.hash${NC}"; fi
-    if [ -s "$ANALYSIS_DIR/eap-leap.hash" ]; then echo -e "${YELLOW}Vulnerable EAP-LEAP hashes found! Saved to eap-leap.hash${NC}"; fi
-
-    echo -e "\n${GREEN}--- Vulnerability Report Complete ---${NC}"
-    echo "Detailed reports and hash files have been saved in: $ANALYSIS_DIR/"
+    if [ -s "$ANALYSIS_DIR/apless_targets.hc22000" ]; then echo "AP-less targets saved to: $ANALYSIS_DIR/apless_targets.hc22000"; fi
+    printf "\n%b\n" "${BLUE}--- Legacy Protocol Scan ---${NC}"
+    hcxpcapngtool $files_to_process --eapmd5="$ANALYSIS_DIR/eap-md5.hash" --eapleap="$ANALYSIS_DIR/eap-leap.hash" --tacacs-plus="$ANALYSIS_DIR/tacacs-plus.hash" >/dev/null 2>&1
+    if [ -s "$ANALYSIS_DIR/eap-md5.hash" ]; then printf "%b\n" "${YELLOW}Vulnerable EAP-MD5 hashes found! Saved to eap-md5.hash${NC}"; fi
+    if [ -s "$ANALYSIS_DIR/eap-leap.hash" ]; then printf "%b\n" "${YELLOW}Vulnerable EAP-LEAP hashes found! Saved to eap-leap.hash${NC}"; fi
+    if [ -s "$ANALYSIS_DIR/tacacs-plus.hash" ]; then printf "%b\n" "${YELLOW}Vulnerable TACACS+ hashes found! Saved to tacacs-plus.hash${NC}"; fi
 }
 
-run_export_analysis() {
+run_pii() {
     shift
     local files_to_process="$@"
-    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
-
-    echo -e "${CYAN}--- Running Export Analysis ---${NC}"
-    printf "Extracting hashes..."
-    if [ "$VERBOSE" -eq 1 ]; then printf "\n"; hcxpcapngtool $files_to_process -o "$ALL_HASHES_FILE"; else run_with_spinner "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"; printf " Done.\n"; fi
-
-    if [ ! -s "$ALL_HASHES_FILE" ]; then
-        echo -e "${YELLOW}No hashes found to export.${NC}"
-        return
-    fi
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
     
-    echo -e "\n${BLUE}--- Exporting to Legacy .cap Format ---${NC}"
-    if [ "$VERBOSE" -eq 1 ]; then hcxhash2cap -c "$ANALYSIS_DIR/legacy_captures.cap" --pmkid-eapol="$ALL_HASHES_FILE"; else hcxhash2cap -c "$ANALYSIS_DIR/legacy_captures.cap" --pmkid-eapol="$ALL_HASHES_FILE" >/dev/null 2>&1; fi
+    printf "%b\n" "${CYAN}--- Scanning for Personally Identifiable Information ---${NC}"
+    local ID_FILE="$ANALYSIS_DIR/identities.txt"; local USER_FILE="$ANALYSIS_DIR/usernames.txt"
+    run_with_spinner "Extracting identities and usernames..." "hcxpcapngtool" $files_to_process -I "$ID_FILE" -U "$USER_FILE"
+    printf "\n%b\n" "${BLUE}--- PII Scan Results ---${NC}"
+    if [ -s "$ID_FILE" ]; then
+        printf "%b\n" "[${YELLOW}FOUND${NC}] Identities discovered and saved to: ${GREEN}$ID_FILE${NC}"
+        if [ "$VERBOSE" -eq 1 ]; then echo "--- Contents ---"; cat "$ID_FILE"; fi
+    else
+        printf "%b\n" "[${GREEN}OK${NC}] No WPA-Enterprise identities found."; rm -f "$ID_FILE"
+    fi
+    if [ -s "$USER_FILE" ]; then
+        printf "%b\n" "[${YELLOW}FOUND${NC}] Usernames discovered and saved to: ${GREEN}$USER_FILE${NC}"
+        if [ "$VERBOSE" -eq 1 ]; then echo "--- Contents ---"; cat "$USER_FILE"; fi
+    else
+        printf "%b\n" "[${GREEN}OK${NC}] No WPA-Enterprise usernames found."; rm -f "$USER_FILE"
+    fi
+}
+
+run_db() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    
+    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes_for_db.hc22000"
+    printf "%b\n" "${CYAN}--- Running Database Update (SQLite) ---${NC}"
+    if ! command -v sqlite3 >/dev/null 2>&1; then printf "%b\n" "${RED}Error: sqlite3 not found!${NC}"; return 1; fi
+    printf "Database located at: %b\n" "${GREEN}${DB_FILE}${NC}"
+    run_with_spinner "Initializing schema..." "sqlite3" "\"$DB_FILE\"" <<'EOF'
+    CREATE TABLE IF NOT EXISTS networks (bssid TEXT PRIMARY KEY, essid_b64 TEXT, vendor TEXT) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS clients (mac TEXT PRIMARY KEY, vendor TEXT, associated_bssid TEXT) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS hashes (hash_content TEXT PRIMARY KEY, hash_type TEXT, bssid TEXT, client_mac TEXT, essid_b64 TEXT, is_apless INTEGER) WITHOUT ROWID;
+EOF
+    run_with_spinner "Extracting data..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No new data found.${NC}"; return; fi
+    parse_and_update_db "sqlite3" "$ALL_HASHES_FILE"; rm -f "$ALL_HASHES_FILE"
+    printf "\n%b\n" "${GREEN}--- SQLite Update Complete ---${NC}"
+}
+
+run_filter_hashes() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    
+    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"; local FILTERED_HASHES_FILE="$ANALYSIS_DIR/filtered_hashes.hc22000"
+    run_with_spinner "Extracting all hashes..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No hashes found.${NC}"; return; fi
+    local HASHTOOL_CMD="hcxhashtool -i '$ALL_HASHES_FILE' -o '$FILTERED_HASHES_FILE'"
+    if [ -n "$MAC_LIST" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --mac-list='$(sanitize_arg "$MAC_LIST")'"; fi
+    if [ -n "$MAC_SKIPLIST" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --mac-skiplist='$(sanitize_arg "$MAC_SKIPLIST")'"; fi
+    if [ -n "$ESSID_FILTER" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --essid='$(sanitize_arg "$ESSID_FILTER")'"; fi
+    if [ -n "$ESSID_REGEX" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --essid-regex='$(sanitize_arg "$ESSID_REGEX")'"; fi
+    if [ -n "$VENDOR_FILTER" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --vendor='$(sanitize_arg "$VENDOR_FILTER")'"; fi
+    if [ -n "$ESSID_MIN_LEN" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --essid-min='$(sanitize_arg "$ESSID_MIN_LEN")'"; fi
+    if [ -n "$ESSID_MAX_LEN" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --essid-max='$(sanitize_arg "$ESSID_MAX_LEN")'"; fi
+    if [ -n "$HASH_TYPE" ]; then HASHTOOL_CMD="$HASHTOOL_CMD --type='$(sanitize_arg "$HASH_TYPE")'"; fi
+    if [ "$AUTHORIZED_ONLY" -eq 1 ]; then HASHTOOL_CMD="$HASHTOOL_CMD --authorized"; fi
+    if [ "$CHALLENGE_ONLY" -eq 1 ]; then HASHTOOL_CMD="$HASHTOOL_CMD --challenge"; fi
+    run_with_spinner "Running filter command..." "$HASHTOOL_CMD"
+    if [ -s "$FILTERED_HASHES_FILE" ]; then echo "Filtered hash file saved to: $FILTERED_HASHES_FILE"; else printf "%b\n" "${YELLOW}No hashes matched criteria.${NC}"; fi
+}
+
+run_generate_wordlist() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    
+    run_with_spinner "Extracting ESSIDs..." "hcxpcapngtool" $files_to_process -E "$ANALYSIS_DIR/all_essids.txt"
+    if [ ! -s "$ANALYSIS_DIR/all_essids.txt" ]; then printf "%b\n" "${YELLOW}No ESSIDs found.${NC}"; return; fi
+    run_with_spinner "Generating wordlist..." "hcxeiutool" -i "$ANALYSIS_DIR/all_essids.txt" -s "$ANALYSIS_DIR/candidate-wordlist.txt"
+    if [ -s "$ANALYSIS_DIR/candidate-wordlist.txt" ]; then echo "Generated wordlist saved to: $ANALYSIS_DIR/candidate-wordlist.txt"; fi
+}
+
+run_merge_hashes() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.hc22000"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .hc22000 files found to process.${NC}"; return 1; fi
+    
+    if [ "$(echo "$files_to_process" | wc -w)" -lt 2 ]; then printf "%b\n" "${RED}Error: Need at least two .hc22000 files to merge.${NC}"; return; fi
+    local MERGED_HASH_FILE="$ANALYSIS_DIR/merged_hashes.hc22000"; local temp_merged="/tmp/temp_merged.hc22000"
+    local first_file=$(echo "$files_to_process" | head -n 1)
+    cp "$first_file" "$temp_merged"
+    echo "$files_to_process" | tail -n +2 | while read -r file; do
+        hcxessidtool --pmkid1="$temp_merged" --pmkid2="$file" --pmkidout12="$MERGED_HASH_FILE" >/dev/null 2>&1
+        mv "$MERGED_HASH_FILE" "$temp_merged"
+    done
+    mv "$temp_merged" "$MERGED_HASH_FILE"; echo "Merged hash file saved to: $MERGED_HASH_FILE"
+}
+
+run_export() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    
+    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
+    run_with_spinner "Extracting hashes..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No hashes found.${NC}"; return; fi
+    printf "\n%b\n" "${BLUE}--- Exporting to .cap Format ---${NC}"
+    run_with_spinner "Converting to .cap..." "hcxhash2cap" -c "$ANALYSIS_DIR/legacy_captures.cap" --pmkid-eapol="$ALL_HASHES_FILE"
     echo "Legacy .cap file saved to: $ANALYSIS_DIR/legacy_captures.cap"
-
-    echo -e "\n${BLUE}--- Exporting Network Information to CSV ---${NC}"
-    if [ "$VERBOSE" -eq 1 ]; then hcxpcapngtool $files_to_process --csv="$ANALYSIS_DIR/networks_summary.csv"; else hcxpcapngtool $files_to_process --csv="$ANALYSIS_DIR/networks_summary.csv" >/dev/null 2>&1; fi
+    printf "\n%b\n" "${BLUE}--- Exporting to CSV ---${NC}"
+    run_with_spinner "Converting to .csv..." "hcxpcapngtool" $files_to_process --csv="$ANALYSIS_DIR/networks_summary.csv"
     echo "Network summary saved to: $ANALYSIS_DIR/networks_summary.csv"
-
-    echo -e "\n${GREEN}--- Export Complete ---${NC}"
-    echo "All exported files are in: $ANALYSIS_DIR/"
 }
 
-run_geotrack_analysis() {
+run_geotrack() {
     shift
     local files_to_process="$@"
-    local NMEA_FILE="$ANALYSIS_DIR/wardriving_track.nmea"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.nmea"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .nmea files found to process.${NC}"; return 1; fi
     
-    echo -e "${CYAN}--- Running Geotracking Analysis ---${NC}"
-    
-    if ! command -v hcxnmealog >/dev/null 2>&1; then
-        echo -e "${RED}Error: hcxnmealog is not installed. This feature requires the latest hcxtools package.${NC}"
-        return
-    fi
-
-    printf "Extracting GPS and network data..."
-    if [ "$VERBOSE" -eq 1 ]; then printf "\n"; hcxnmealog -i "$files_to_process" -n "$NMEA_FILE"; else run_with_spinner "hcxnmealog" -i "$files_to_process" -n "$NMEA_FILE"; printf " Done.\n"; fi
-    
-    echo -e "\n${GREEN}--- Geotracking Export Complete ---${NC}"
-    if [ -s "$NMEA_FILE" ]; then
-        echo "NMEA track file saved to: $NMEA_FILE"
-        echo "You can convert this to KML for Google Earth with:"
-        echo -e "${CYAN}gpsbabel -w -t -i nmea -f $NMEA_FILE -o kml -F track.kml${NC}"
-    else
-        echo -e "${YELLOW}No GPS data was found in the capture files.${NC}"
-    fi
+    if ! command -v gpsbabel >/dev/null 2>&1; then printf "%b\n" "${RED}Error: gpsbabel is not installed.${NC}"; return; fi
+    local KML_FILE="$ANALYSIS_DIR/wardriving_track.kml"; local temp_combined_nmea="/tmp/combined_nmea.tmp"; >"$temp_combined_nmea"
+    echo "$files_to_process" | while read -r f; do cat "$f" >> "$temp_combined_nmea"; done
+    if [ ! -s "$temp_combined_nmea" ]; then printf "%b\n" "${YELLOW}No .nmea data found.${NC}"; return; fi
+    run_with_spinner "Converting NMEA to KML..." "gpsbabel" -w -t -i nmea -f "$temp_combined_nmea" -o kml -F "$KML_FILE"
+    rm -f "$temp_combined_nmea"; echo "KML track file saved to: $KML_FILE"
 }
 
-run_remote_crack_analysis() {
+run_remote_crack() {
     shift
     local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    
+    if [ "$REMOTE_SERVER_ENABLED" -eq 0 ]; then printf "%b\n" "${YELLOW}Remote cracking is disabled.${NC}"; return; fi
     local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
-
-    echo -e "${CYAN}--- Running Remote Cracking Offload ---${NC}"
+    run_with_spinner "Extracting hashes..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No hashes found to crack.${NC}"; return; fi
     
-    if [ "$REMOTE_CRACK_ENABLED" -eq 0 ]; then
-        echo -e "${YELLOW}Remote cracking is disabled. Please edit /etc/hcxtools/hcxscript.conf to enable it.${NC}"
-        return
-    fi
-
-    printf "Extracting hashes..."
-    if [ "$VERBOSE" -eq 1 ]; then printf "\n"; hcxpcapngtool $files_to_process -o "$ALL_HASHES_FILE"; else run_with_spinner "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"; printf " Done.\n"; fi
-    if [ ! -s "$ALL_HASHES_FILE" ]; then
-        echo -e "${YELLOW}No hashes found to crack.${NC}"
-        return
-    fi
-
-    echo -e "You are about to send ${GREEN}$(basename "$ALL_HASHES_FILE")${NC} to ${GREEN}${REMOTE_USER}@${REMOTE_HOST}${NC}"
-    printf "Are you sure you want to continue? [y/N] "
-    read -r response
-    if ! (echo "$response" | grep -qE '^[yY]([eE][sS])?$'); then
-        echo "Remote cracking cancelled."
-        return
-    fi
-
-    echo "Uploading hash file..."
-    scp "$ALL_HASHES_FILE" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_CAPTURE_PATH}/"
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: SCP upload failed. Check your connection and configuration in /etc/hcxtools/hcxscript.conf.${NC}"
-        return
-    fi
-
-    local remote_hash_file="${REMOTE_CAPTURE_PATH}/$(basename "$ALL_HASHES_FILE")"
-    local remote_potfile="${REMOTE_CAPTURE_PATH}/cracked.pot"
+    run_with_spinner "Preparing remote crack directory..." "ssh" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "mkdir -p $REMOTE_CAPTURE_PATH" || return 1
+    
+    printf "%b\n" "You are about to send hashes to ${GREEN}\"${REMOTE_SERVER_USER}\"@${REMOTE_SERVER_HOST}${NC} for cracking."
+    printf "Are you sure? [y/N] "; read -r response
+    if ! (echo "$response" | grep -qE '^[yY]([eE][sS])?$'); then echo "Cancelled."; return; fi
+    run_with_spinner "Uploading hash file..." "scp" "$ALL_HASHES_FILE" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${REMOTE_CAPTURE_PATH}/" || return 1
+    local remote_hash_file="${REMOTE_CAPTURE_PATH}/$(basename "$ALL_HASHES_FILE")"; local remote_potfile="${REMOTE_CAPTURE_PATH}/cracked.pot"
     local HASHCAT_CMD="'$REMOTE_HASHCAT_PATH' -m 22000 '$remote_hash_file' '$REMOTE_WORDLIST_PATH' --potfile-path '$remote_potfile'"
-
-    echo -e "\n${BLUE}--- Starting Remote Hashcat Session ---${NC}"
-    echo "Executing the following command on ${REMOTE_HOST}:"
-    echo -e "${YELLOW}${HASHCAT_CMD}${NC}"
-    
-    ssh "${REMOTE_USER}@${REMOTE_HOST}" "nohup sh -c \"${HASHCAT_CMD}\" > /dev/null 2>&1 &"
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: SSH command failed. Check your connection and configuration in /etc/hcxtools/hcxscript.conf.${NC}"
-        return
-    fi
-
-    echo -e "\n${GREEN}--- Remote Cracking Session Started! ---${NC}"
-    echo "Hashcat is now running in the background on ${REMOTE_HOST}."
-    echo "You can check its progress by logging into the remote server."
-    echo "To retrieve cracked passwords later, run this command from your local machine:"
-    echo -e "${CYAN}scp ${REMOTE_USER}@${REMOTE_HOST}:${remote_potfile} . && ${REMOTE_HASHCAT_PATH} --show -m 22000 ${ALL_HASHES_FILE} --potfile-path cracked.pot${NC}"
-}
-
-run_interactive_mode() {
-    echo -e "${CYAN}--- HCX Analyzer Interactive Mode ---${NC}"
-    echo "Please select an analysis mode:"
-    echo "  1) Summary (Fast overview of captures)"
-    echo "  2) Intelligence (Deep analysis of devices and vendors)"
-    echo "  3) Vulnerability (Check for weak passwords and flaws)"
-    echo "  4) Export (Convert data for other tools)"
-    echo "  5) Geotrack (Extract GPS data to a map file)"
-    echo "  6) Remote Crack (Offload cracking to a powerful machine)"
-    printf "Choice [1-6]: "
-    read -r mode_choice
-
-    case "$mode_choice" in
-        1) 
-            MODE="summary"
-            echo -e "\nThe Summary mode can be run in two ways:"
-            echo "  1) Quick (Fast, but gives a less detailed hash count)"
-            echo "  2) Deep  (Slower, but provides an accurate PMKID vs Handshake count)"
-            echo -e "${YELLOW}Warning: Deep mode can take a while on the Pineapple with large captures.${NC}"
-            printf "Summary type [1-2]: "
-            read -r summary_choice
-            case "$summary_choice" in
-                1) SUMMARY_MODE="quick";;
-                2) SUMMARY_MODE="deep";;
-                *) echo "${RED}Invalid choice. Defaulting to deep analysis.${NC}"; SUMMARY_MODE="deep";;
-            esac
-            ;;
-        2) MODE="intel";;
-        3) MODE="vuln";;
-        4) MODE="export";;
-        5) MODE="geotrack";;
-        6) MODE="remote-crack";;
-        *) echo "${RED}Invalid choice. Exiting.${NC}"; exit 1;;
-    esac
+    printf "\n%b\n" "${BLUE}--- Starting Remote Hashcat Session ---${NC}"
+    ssh "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "nohup sh -c \"${HASHCAT_CMD}\" > /dev/null 2>&1 &" || { printf "%b\n" "${RED}SSH command failed.${NC}"; return 1; }
+    printf "\n%b\n" "${GREEN}--- Remote Cracking Session Started! ---${NC}"
+    printf "To retrieve cracked passwords, run:\n"
+    printf "%b\n" "${CYAN}scp \"${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${remote_potfile}\" . && hashcat --show -m 22000 ${ALL_HASHES_FILE} --potfile-path cracked.pot${NC}"
 }
 
 #==============================================================================
-# SCRIPT EXECUTION
+# DATABASE & REMOTE EXECUTION
 #==============================================================================
 
-main() {
-    local TARGET_ARGS=""
-    local has_mode_arg=0
+run_mysql() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
     
-    for arg in "$@"; do
-        if [ "$arg" = "--mode" ]; then
-            has_mode_arg=1
+    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes_for_db.hc22000"
+    printf "%b\n" "${CYAN}--- Running Database Update (MySQL) ---${NC}"
+    run_with_spinner "Extracting data..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
+    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No new data found.${NC}"; return; fi
+    parse_and_update_db "mysql" "$ALL_HASHES_FILE"; rm -f "$ALL_HASHES_FILE"
+    printf "\n%b\n" "${GREEN}--- MySQL Update Complete ---${NC}"
+}
+
+parse_and_update_db() {
+    local db_type="$1"; shift; local all_hashes_file="$1"
+    local sql_file="/tmp/db_update.sql"; >"$sql_file"
+    printf "Parsing data and generating SQL..."
+    while IFS= read -r line; do
+        local hash_type=$(echo "$line" | cut -d'*' -f1); local bssid=$(echo "$line" | cut -d'*' -f3 | tr '[:lower:]' '[:upper:]'); local client_mac=$(echo "$line" | cut -d'*' -f4 | tr '[:lower:]' '[:upper:]'); local essid_hex=$(echo "$line" | cut -d'*' -f5)
+        local essid_b64=$(echo "$essid_hex" | xxd -r -p | base64); local apless=0; [ "$hash_type" = "1" ] && apless=1; local safe_line=$(echo "$line" | sed "s/'/''/g")
+        if [ "$db_type" = "sqlite3" ]; then
+            echo "INSERT OR IGNORE INTO networks (bssid, essid_b64) VALUES ('$bssid', '$essid_b64');" >> "$sql_file"
+            [ "$client_mac" != "000000000000" ] && echo "INSERT OR IGNORE INTO clients (mac, associated_bssid) VALUES ('$client_mac', '$bssid');" >> "$sql_file"
+            echo "INSERT OR IGNORE INTO hashes (hash_content, hash_type, bssid, client_mac, essid_b64, is_apless) VALUES ('$safe_line', '$hash_type', '$bssid', '$client_mac', '$essid_b64', $apless);" >> "$sql_file"
+        elif [ "$db_type" = "mysql" ]; then
+            echo "INSERT IGNORE INTO networks (bssid, essid_b64) VALUES ('$bssid', '$essid_b64');" >> "$sql_file"
+            [ "$client_mac" != "000000000000" ] && echo "INSERT IGNORE INTO clients (mac, associated_bssid) VALUES ('$client_mac', '$bssid');" >> "$sql_file"
+            echo "INSERT IGNORE INTO hashes (hash_content, hash_type, bssid, client_mac, essid_b64, is_apless) VALUES ('$safe_line', '$hash_type', '$bssid', '$client_mac', '$essid_b64', $apless);" >> "$sql_file"
+        fi
+    done < "$all_hashes_file"
+    hcxhashtool -i "$all_hashes_file" --info-vendor=stdout | while read -r line; do
+        local mac=$(echo "$line" | awk '{print $1}' | tr '[:lower:]' '[:upper:]'); local vendor=$(echo "$line" | cut -d' ' -f2- | sed "s/'/''/g")
+        if [ "$db_type" = "sqlite3" ]; then
+            echo "UPDATE networks SET vendor = '$vendor' WHERE bssid = '$mac' AND vendor IS NULL;" >> "$sql_file"; echo "UPDATE clients SET vendor = '$vendor' WHERE mac = '$mac' AND vendor IS NULL;" >> "$sql_file"
+        elif [ "$db_type" = "mysql" ]; then
+            echo "UPDATE networks SET vendor = '$vendor' WHERE bssid = '$mac' AND vendor IS NULL;" >> "$sql_file"; echo "UPDATE clients SET vendor = '$vendor' WHERE mac = '$mac' AND vendor IS NULL;" >> "$sql_file"
         fi
     done
+    printf "${GREEN}Done.${NC}\n"; printf "Updating database from SQL file..."
+    if [ "$db_type" = "sqlite3" ]; then sqlite3 "$DB_FILE" < "$sql_file"; elif [ "$db_type" = "mysql" ]; then mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$sql_file"; fi
+    printf "${GREEN}Done.${NC}\n"; rm -f "$sql_file"
+}
 
-    if [ "$has_mode_arg" -eq 0 ] && [ "$1" != "-h" ] && [ "$1" != "--help" ]; then
-        is_only_files=1
-        for arg in "$@"; do
-            if [ -n "$arg" ] && [ ! -f "$arg" ] && [ ! -d "$arg" ]; then
-                is_only_files=0
-                break
+run_remote_execution() {
+    local action_type="$1"; local action_name="$2"; shift 2
+    printf "%b\n" "${CYAN}--- Initiating Remote Execution: ${action_type} -> ${action_name} ---${NC}"
+    if [ "$REMOTE_SERVER_ENABLED" -eq 0 ]; then printf "%b\n" "${RED}Remote execution is disabled.${NC}"; return 1; fi
+    if [ "$#" -eq 0 ]; then
+        printf "%b\n" "${YELLOW}No files specified for remote execution.${NC}"; return 1
+    fi
+    printf "Files to be uploaded:\n"; printf '  %s\n' "$@"
+    
+    printf "\n%b\n" "${BLUE}--- Preparing Remote Environment ---${NC}"
+    run_with_spinner "Preparing remote directory..." "ssh" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "mkdir -p '${REMOTE_SERVER_TMP_PATH}'" || return 1
+    
+    run_with_spinner "Uploading files..." "scp" -q -r -- "$@" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${REMOTE_SERVER_TMP_PATH}/" || return 1
+    
+    local remote_script_path="$REMOTE_SERVER_TMP_PATH/remote_job.sh"; local local_db_path=""
+    if [ "$action_name" = "db" ]; then
+        run_with_spinner "Uploading local SQLite DB..." "scp" -q "$DB_FILE" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${REMOTE_SERVER_TMP_PATH}/database.db"
+        local_db_path="$REMOTE_SERVER_TMP_PATH/database.db"
+    fi
+    
+    local function_definitions=""; local required_funcs="sanitize_arg run_with_spinner run_summary run_intel run_vuln run_pii run_db run_mysql parse_and_update_db run_filter_hashes run_generate_wordlist run_merge_hashes run_export run_geotrack run_health_check version_ge run_interactive_mode";
+    for func in $required_funcs; do
+        func_def=$(sed -n "/^${func}() {/,/^\}/p" "$0"); function_definitions="$function_definitions
+$func_def"
+    done
+    
+    REMOTE_SCRIPT=$(cat <<EOF
+#!/bin/sh
+action_name='$action_name'
+export NC='\\033[0m' GREEN='\\033[0;32m' YELLOW='\\033[1;33m' CYAN='\\033[0;36m' BLUE='\\033[0;34m' RED='\\033[0;31m'
+export ANALYSIS_DIR="$REMOTE_SERVER_TMP_PATH"; export CAPTURE_DIR="$REMOTE_SERVER_TMP_PATH"; export DB_FILE="$local_db_path"
+export DB_HOST='$(sanitize_arg "$DB_HOST")'; export DB_USER='$(sanitize_arg "$DB_USER")'; export DB_PASS='$(sanitize_arg "$DB_PASS")'; export DB_NAME='$(sanitize_arg "$DB_NAME")'
+export VERBOSE=$VERBOSE; export MAC_LIST='$(sanitize_arg "$MAC_LIST")'; export MAC_SKIPLIST='$(sanitize_arg "$MAC_SKIPLIST")'
+export ESSID_FILTER='$(sanitize_arg "$ESSID_FILTER")'; export VENDOR_FILTER='$(sanitize_arg "$VENDOR_FILTER")'
+export ESSID_MIN_LEN='$(sanitize_arg "$ESSID_MIN_LEN")'; export ESSID_MAX_LEN='$(sanitize_arg "$ESSID_MAX_LEN")'; export HASH_TYPE='$(sanitize_arg "$HASH_TYPE")'
+export ESSID_REGEX='$(sanitize_arg "$ESSID_REGEX")'; export AUTHORIZED_ONLY=$AUTHORIZED_ONLY; export CHALLENGE_ONLY=$CHALLENGE_ONLY
+export SUMMARY_MODE='$(sanitize_arg "$SUMMARY_MODE")'
+
+$function_definitions
+
+printf "%b\\n" "\${CYAN}--- Remote Job Started: \${action_name} ---"
+if [ "\$action_name" = "interactive" ]; then run_interactive_mode "remote"; else run_\${action_name} "remote"; fi
+printf "%b\\n" "\${GREEN}--- Remote Job Finished ---\${NC}"
+EOF
+)
+    echo "$REMOTE_SCRIPT" | ssh "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "cat > '$remote_script_path' && chmod +x '$remote_script_path'"
+    
+    printf "\n%b\n" "${BLUE}--- Executing Remote Job ---${NC}"; ssh -T "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "'$remote_script_path'"; local ssh_exit_code=$?
+    printf "%b\n" "${BLUE}--- Remote Execution Complete ---${NC}"
+
+    if [ $ssh_exit_code -eq 0 ]; then
+        printf "%b\n" "${GREEN}Remote job finished successfully.${NC}"
+
+        if [ "$action_type" = "utility" ] || { [ "$action_type" = "mode" ] && [ "$action_name" != "db" ] && [ "$action_name" != "mysql" ] && [ "$action_name" != "interactive" ]; }; then
+            local remote_archive="${REMOTE_SERVER_TMP_PATH}/results.tar"
+            local local_archive="/tmp/results.tar"
+
+            local archive_cmd="tar -cf '${remote_archive}' --exclude='remote_job.sh' -C '${REMOTE_SERVER_TMP_PATH}' ."
+            run_with_spinner "Archiving remote results..." \
+                "ssh" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "$archive_cmd"
+
+            if ssh -T "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "[ -s '${remote_archive}' ]"; then
+                printf "Downloading results..."
+                if scp "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${remote_archive}" "${local_archive}"; then
+                    printf " ${GREEN}Done.${NC}\n"
+                    
+                    run_with_spinner "Extracting results locally..." \
+                        "tar" -xf "${local_archive}" -C "${ANALYSIS_DIR}"
+                    rm -f "${local_archive}"
+                    printf "%b\n" "Results successfully transferred back to the Pineapple: ${GREEN}${ANALYSIS_DIR}/${NC}"
+                else
+                    printf " ${RED}Failed.${NC}\n"
+                    printf "%b\n" "${RED}Could not download results archive from remote host.${NC}"
+                fi
+            else
+                printf "%b\n" "${RED}Failed to create or find results archive on remote host.${NC}"
+                printf "%b\n" "${CYAN}Listing remote directory for debugging:${NC}"
+                ssh -T "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "ls -la '${REMOTE_SERVER_TMP_PATH}'"
             fi
-        done
-        if [ "$is_only_files" -eq 1 ] && [ $# -gt 0 ]; then
-            has_mode_arg=1
+        elif [ "$action_name" = "db" ]; then
+            run_with_spinner "Downloading updated SQLite DB..." "scp" -q "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${local_db_path}" "$DB_FILE"
+        fi
+    else
+        printf "%b\n" "${RED}Remote script exited with an error (Code: $ssh_exit_code). Results may not be complete.${NC}"
+    fi
+
+    run_with_spinner "Cleaning up remote session files..." \
+        "ssh" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "rm -rf '${REMOTE_SERVER_TMP_PATH}'"
+}
+
+
+#==============================================================================
+# SCRIPT EXECUTION LOGIC
+#==============================================================================
+
+run_health_check() {
+    printf "%b\n" "${CYAN}--- Running Health Check ---${NC}"; local required_version="6.2.7"; local check_passed=1
+    printf "%b\n" "${BLUE}--- Local System ---${NC}"; local local_version=$(hcxpcapngtool -v 2>/dev/null | head -n 1 | awk '{print $2}')
+    if [ -z "$local_version" ]; then printf "%b\n" "[${RED}FAIL${NC}] hcxtools not found."; check_passed=0; else
+        printf "[..] Found hcxtools version: %s\n" "$local_version"; version_ge "$local_version" "$required_version"
+        if [ $? -eq 0 ]; then printf "%b\n" "[${GREEN}OK${NC}] Version is compatible (>= $required_version)."; else
+            printf "%b\n" "[${RED}FAIL${NC}] Version is not compatible. Please upgrade."; check_passed=0; fi
+    fi
+    if [ "$REMOTE_SERVER_ENABLED" -eq 1 ]; then
+        printf "\n%b\n" "${BLUE}--- Remote System (${REMOTE_SERVER_HOST}) ---${NC}"
+        local remote_version=$(ssh "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "hcxpcapngtool -v" 2>/dev/null | head -n 1 | awk '{print $2}')
+        if [ -z "$remote_version" ]; then printf "%b\n" "[${RED}FAIL${NC}] hcxtools not found on remote or SSH failed."; check_passed=0; else
+            printf "[..] Found hcxtools version: %s\n" "$remote_version"; version_ge "$remote_version" "$required_version"
+            if [ $? -eq 0 ]; then printf "%b\n" "[${GREEN}OK${NC}] Version is compatible (>= $required_version)."; else
+                printf "%b\n" "[${RED}FAIL${NC}] Version is not compatible. Please upgrade."; check_passed=0; fi
         fi
     fi
-    
-    if [ "$has_mode_arg" -eq 0 ] && [ "$1" != "-h" ] && [ "$1" != "--help" ]; then
-        run_interactive_mode
-    else
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                --mode) MODE="$2"; shift 2 ;;
-                --summary-mode) SUMMARY_MODE="$2"; shift 2;;
-                -v|--verbose) VERBOSE=1; shift ;;
-                -h|--help) show_usage; exit 0 ;;
-                *) if [ -z "$TARGET_ARGS" ]; then TARGET_ARGS="$1"; else TARGET_ARGS="$TARGET_ARGS $1"; fi; shift ;;
-            esac
-        done
-    fi
+    if [ "$check_passed" -eq 1 ]; then printf "\n%b\n" "${GREEN}Health check passed.${NC}"; else printf "\n%b\n" "${RED}Health check failed.${NC}"; fi
+}
 
-    if ! command -v hcxpcapngtool >/dev/null 2>&1; then
-        echo -e "${RED}Error: hcxtools-custom package not found or not in PATH.${NC}"
-        exit 1
-    fi
-    
-    local files_to_analyze=""
-    if [ -z "$TARGET_ARGS" ]; then
-        if [ ! -d "$CAPTURE_DIR" ]; then
-            echo -e "${RED}Error: Default capture directory not found: $CAPTURE_DIR${NC}"
-            exit 1
-        fi
-        files_to_analyze=$(find "$CAPTURE_DIR" -name "*.pcapng")
-    else
-        for path in $TARGET_ARGS; do
-            if [ -d "$path" ]; then
-                files_to_analyze="$files_to_analyze $(find "$path" -name '*.pcapng')"
-            elif [ -f "$path" ]; then
-                files_to_analyze="$files_to_analyze $path"
-            fi
-        done
-    fi
-    
-    if [ -z "$files_to_analyze" ]; then
-        echo -e "${YELLOW}No .pcapng files found in the specified path(s).${NC}"
+version_ge() { [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" != "$1" ]; }
+
+run_interactive_mode() {
+    local prompt_prefix=""; [ "$1" = "remote" ] && prompt_prefix="${RED}[REMOTE]${NC} "
+    printf "%b\n" "${CYAN}--- HCX Analyzer Interactive Mode ${prompt_prefix}---${NC}"; echo "Please select a mode:"; echo ""
+    printf "%b\n" "${YELLOW}--- ANALYSIS MODES ---${NC}"; echo "  1) summary"; echo "  2) intel"; echo "  3) vuln"; echo "  4) pii"; echo "  5) db"
+    printf "%b\n" "${YELLOW}--- UTILITY MODES ---${NC}"; echo "  6) filter_hashes"; echo "  7) generate_wordlist"; echo "  8) merge_hashes"
+    echo "  9) export"; echo "  10) geotrack"; echo "  11) remote_crack"; echo "  12) health_check"
+    printf "Choice [1-12]: "; read -r choice
+    case "$choice" in ''|*[!0-9]*) printf "\n%b\n" "${RED}Error: Invalid input.${NC}"; exit 1;; esac
+    MODE=""; UTILITY_ACTION=""
+    case "$choice" in
+        1) MODE="summary";; 2) MODE="intel";; 3) MODE="vuln";; 4) MODE="pii";; 5) MODE="db";;
+        6) UTILITY_ACTION="filter_hashes";; 7) UTILITY_ACTION="generate_wordlist";;
+        8) UTILITY_ACTION="merge_hashes";; 9) UTILITY_ACTION="export";;
+        10) UTILITY_ACTION="geotrack";; 11) UTILITY_ACTION="remote_crack";;
+        12) UTILITY_ACTION="health_check";;
+        *) printf "\n%b\n" "${RED}Error: Invalid choice.${NC}"; exit 1;;
+    esac
+    local action_to_run=""; if [ -n "$MODE" ]; then action_to_run=$MODE; else action_to_run=$UTILITY_ACTION; fi
+    if [ "$action_to_run" = "health_check" ]; then run_health_check; exit 0; fi
+    local files_to_process=""
+    if [ "$action_to_run" = "merge_hashes" ]; then files_to_process=$(find "$CAPTURE_DIR" -name '*.hc22000');
+    elif [ "$action_to_run" = "geotrack" ]; then files_to_process=$(find "$CAPTURE_DIR" -name '*.nmea');
+    else files_to_process=$(find "$CAPTURE_DIR" -name '*.pcapng'); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${YELLOW}No relevant files found in '$CAPTURE_DIR'.${NC}"; exit 0; fi
+    set -- $files_to_process; "run_${action_to_run}" "interactive" "$@"
+}
+
+main() {
+    if [ $# -eq 0 ]; then run_interactive_mode; exit 0; fi
+    local TARGET_ARGS=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --mode) MODE="$2"; shift 2 ;;
+            --remote-mode) REMOTE_ACTION=1; MODE="$2"; shift 2;;
+            --utility) UTILITY_ACTION="$2"; shift 2 ;;
+            --remote-utility) REMOTE_ACTION=1; UTILITY_ACTION="$2"; shift 2;;
+            --summary-mode) SUMMARY_MODE="$2"; shift 2;;
+            --remote-host) REMOTE_SERVER_HOST="$2"; shift 2;;
+            --mac-list) MAC_LIST="$2"; shift 2;;
+            --mac-skiplist) MAC_SKIPLIST="$2"; shift 2;;
+            --essid) ESSID_FILTER="$2"; shift 2;;
+            --essid-regex) ESSID_REGEX="$2"; shift 2;;
+            --vendor) VENDOR_FILTER="$2"; shift 2;;
+            --essid-min) ESSID_MIN_LEN="$2"; shift 2;;
+            --essid-max) ESSID_MAX_LEN="$2"; shift 2;;
+            --type) HASH_TYPE="$2"; shift 2;;
+            --authorized) AUTHORIZED_ONLY=1; shift;;
+            --challenge) CHALLENGE_ONLY=1; shift;;
+            -v|--verbose) VERBOSE=1; shift ;;
+            -h|--help) show_usage; exit 0 ;;
+            *) if [ -z "$TARGET_ARGS" ]; then TARGET_ARGS="$1"; else TARGET_ARGS="$TARGET_ARGS $1"; fi; shift ;;
+        esac
+    done
+    if [ -z "$MODE" ] && [ -z "$UTILITY_ACTION" ]; then MODE="summary"; fi
+    if [ "$MODE" = "interactive" ]; then
+        if [ "$REMOTE_ACTION" -eq 1 ]; then run_remote_execution "mode" "interactive"; else run_interactive_mode "local"; fi
         exit 0
     fi
-
-    case "$MODE" in
-        summary) run_summary_analysis "summary" $files_to_analyze ;;
-        intel) run_intel_analysis "intel" $files_to_analyze ;;
-        vuln) run_vulnerability_analysis "vuln" $files_to_analyze ;;
-        export) run_export_analysis "export" $files_to_analyze ;;
-        geotrack) run_geotrack_analysis "geotrack" $files_to_analyze ;;
-        remote-crack) run_remote_crack_analysis "remote-crack" $files_to_analyze ;;
-        *) echo -e "${RED}Invalid mode selected.${NC}"; show_usage; exit 1 ;;
-    esac
-
-    echo -e "\n${GREEN}Analyzer finished.${NC}"
+    local action_to_run=""; local action_type="mode"
+    if [ -n "$MODE" ]; then action_to_run=$MODE; action_type="mode"; elif [ -n "$UTILITY_ACTION" ]; then action_to_run=$UTILITY_ACTION; action_type="utility"; fi
+    if [ -z "$action_to_run" ]; then printf "%b\n" "${RED}No valid action specified.${NC}"; exit 1; fi
+    if [ "$action_to_run" = "health_check" ]; then run_health_check; exit 0; fi
+    local files_to_process=""; local target_paths="$TARGET_ARGS"; if [ -z "$target_paths" ]; then target_paths="$CAPTURE_DIR"; fi
+    for path in $target_paths; do
+        if [ -d "$path" ]; then
+            if [ "$action_to_run" = "merge_hashes" ]; then files_to_process="$files_to_process $(find "$path" -name '*.hc22000')";
+            elif [ "$action_to_run" = "geotrack" ]; then files_to_process="$files_to_process $(find "$path" -name '*.nmea')";
+            else files_to_process="$files_to_process $(find "$path" -name '*.pcapng')"; fi
+        elif [ -f "$path" ]; then files_to_process="$files_to_process $path"; fi
+    done
+    if [ -z "$files_to_process" ] && [ "$action_to_run" != "interactive" ]; then printf "%b\n" "${YELLOW}No relevant files found.${NC}"; exit 0; fi
+    set -- $files_to_process
+    if [ "$REMOTE_ACTION" -eq 1 ]; then
+        run_remote_execution "$action_type" "$action_to_run" "$@"
+    else
+        "run_${action_to_run}" "local" "$@"
+    fi
+    printf "\n%b\n" "${GREEN}Analyzer finished.${NC}"
 }
 
 main "$@"

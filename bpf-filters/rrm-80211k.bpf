@@ -1,0 +1,32 @@
+# 802.11k (RRM) Enabled AP BPF Filter
+#
+# Purpose: Captures management frames from Access Points that have
+#          802.11k (Radio Resource Management) enabled.
+#
+# Use Case: For network analysis, reconnaissance, or identifying APs
+#           that support fast roaming transitions (BSS Transition Management).
+#
+# How it Works:
+# This filter targets 802.11 Beacon and Probe Response frames and checks a
+# specific bit in the "Capability Information" field.
+#   1. It first checks if the frame is a Beacon (wlan[0] == 0x80) or a
+#      Probe Response (wlan[0] == 0x50).
+#   2. It then inspects the byte at offset 35 of the frame. Bit 12 of the
+#      Capability Information field indicates "Radio Measurement" support,
+#      which is the core of 802.11k.
+#   3. The filter logic is '(type mgt subtype beacon or type mgt subtype probe-resp) and wlan[35] & 0x10 != 0'.
+#
+# Usage:
+# hcxdumptool-launcher --bpf 80211k.bpf
+#
+# Generated for: Beacon/Probe-Resp frames where Capability Info Bit 12 is set.
+
+8
+48 0 0 0
+21 1 0 128
+21 0 4 80
+48 0 0 35
+84 0 0 16
+21 1 0 0
+6 0 0 65535
+6 0 0 0

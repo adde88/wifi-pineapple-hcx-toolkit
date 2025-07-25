@@ -20,7 +20,7 @@ This guide covers common issues and solutions when using the WiFi Pineapple HCX 
 **A:** This almost always means your device has run out of memory.
 -   **Solution 1 (Reduce Scope)**: Scan fewer channels instead of all of them.
     ```bash
-    hcxdumptool-launcher -i wlan1 -c 1,6,11
+    hcxdumptool-launcher -i wlan2 -c 1,6,11
     ```
 -   **Solution 2 (Stop Services)**: Stop other services on your Pineapple (`pineapd`, `lighttpd`, etc.) to free up RAM.
 

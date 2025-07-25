@@ -1,17 +1,16 @@
 #!/bin/sh
 #
-# hcxdumptool-launcher - An advanced automation framework for hcxdumptool.
-# Version: 5.0.1
+# hcxdumptool-launcher - An advanced automation framework for hcxdumptool & hcxlabtool.
 # Author: Andreas Nilsen
 # Github: https://www.github.com/adde88
 #
 # This script is designed to work with the custom packages from:
 # https://github.com/adde88/openwrt-useful-tools
 
+# --- Add sbin to PATH to ensure system binaries are found ---
+export PATH="/usr/sbin:/sbin:$PATH"
+
 #--- Script Information and Constants ---#
-readonly SCRIPT_VERSION="5.0.1"
-readonly REQ_HCXDUMPTOOL_VER_STR="v21.02.0"
-readonly REQ_HCXTOOLS_VER_STR="6.2.7"
 readonly INSTALL_DIR="/etc/hcxtools"
 readonly CONFIG_FILE="$INSTALL_DIR/hcxscript.conf"
 readonly PROFILE_DIR="$INSTALL_DIR/profiles"
@@ -20,6 +19,19 @@ readonly LOG_FILE="$INSTALL_DIR/launcher.log"
 readonly INSTALL_BIN="/usr/bin/hcxdumptool-launcher"
 readonly ANALYZER_BIN="/usr/bin/hcx-analyzer.sh"
 readonly UPDATE_URL="https://raw.githubusercontent.com/adde88/wifi-pineapple-hcx-toolkit/main/hcxdumptool-launcher.sh"
+readonly VERSION_FILE="$INSTALL_DIR/VERSION"
+
+# --- Dynamically read script version ---
+if [ -f "$VERSION_FILE" ]; then
+    SCRIPT_VERSION=$(cat "$VERSION_FILE")
+else
+    SCRIPT_VERSION="7.0.0" # Fallback for standalone execution
+fi
+
+#--- Tool Requirements ---#
+readonly REQ_HCXDUMPTOOL_VER_STR="v21.02.0"
+readonly REQ_HCXTOOLS_VER_STR="6.2.7"
+readonly REQ_HCXLABTOOL_VER_STR="7.0"
 
 #--- Color Codes ---#
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m';
@@ -38,17 +50,27 @@ HCXD_OPTS=""
 QUIET=0
 INTERACTIVE_MODE=0
 AUTO_CHANNELS=0
-SESSION_NAME=""
 RESTORE_INTERFACE=1
 ENABLE_GPS=0
+FULL_HELP=0
+WARDRIVING_LOOP=0
+RDS_MODE=0
+FILTER_FILE=""
+FILTER_MODE="blacklist"
+OUI_FILE=""
+OUI_FILTER_MODE="blacklist"
+
+#--- New v6.0.0 Settings ---
+BACKEND="hcxdumptool" # Default backend
 PASSIVE_MODE=0
 SURVEY_MODE=0
 HUNT_HANDSHAKES=0
-FULL_HELP=0
-WARDRIVING_LOOP=0
+CLIENT_ONLY_HUNT=0
+PMKID_PRIORITY_HUNT=0
+TIME_WARP_ATTACK=0
 
 #--- Runtime Variables ---#
-HCXDUMPTOOL_PID=0
+HCX_PID=0
 TEMP_FILE="/tmp/hcx_session_files_$$"
 START_TIME=0
 
@@ -57,6 +79,7 @@ START_TIME=0
 #==============================================================================
 
 log_message() {
+    if [ ! -d "$INSTALL_DIR" ]; then return; fi
     if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE" 2>/dev/null)" -gt 1048576 ]; then
         mv "$LOG_FILE" "$LOG_FILE.old" 2>/dev/null
     fi
@@ -80,26 +103,19 @@ show_full_help() {
     echo
     echo -e "${CYAN}--- Advanced Usage & Examples ---${NC}"
     echo
-    echo -e "${BLUE}Simple Examples (Discover & Capture):${NC}"
-    echo "  # Passively listen for any client probes on wlan1"
-    echo "  $SCRIPT_CMD -i wlan1 --passive --bpf probe-requests"
+    echo -e "${BLUE}Standard Examples (hcxdumptool backend):${NC}"
+    echo "  # Hunt for handshakes (default backend)"
+    echo "  $SCRIPT_CMD -i wlan2 --hunt-handshakes -d 600"
     echo
-    echo "  # Run a quick 5-minute survey for all APs in the area"
-    echo "  $SCRIPT_CMD -i wlan1 --survey -d 300"
+    echo "  # Blacklist your own devices to avoid capturing them"
+    echo "  $SCRIPT_CMD -i wlan2 --filter-file my_devices.txt --filter-mode blacklist"
     echo
-    echo -e "${BLUE}Medium Examples (Automation & Targeting):${NC}"
-    echo "  # Find the 5 busiest 2.4GHz channels and capture for 10 minutes"
-    echo "  $SCRIPT_CMD -i wlan1 --auto-channels 5 -d 600"
+    echo -e "${BLUE}Advanced Examples (hcxlabtool backend):${NC}"
+    echo "  # Whitelist a specific vendor by their OUI"
+    echo "  $SCRIPT_CMD -i wlan2 --backend hcxlabtool --oui-file cisco.txt --oui-filter-mode whitelist"
     echo
-    echo "  # Start a GPS-enabled wardriving session, creating a new file every 15 minutes"
-    echo "  $SCRIPT_CMD -i wlan1 --wardriving-loop 900 --enable-gps"
-    echo
-    echo -e "${BLUE}Advanced Examples (Vulnerability Recon & Analysis):${NC}"
-    echo "  # Hunt for handshakes for 10 minutes, then run a deep analysis"
-    echo "  $SCRIPT_CMD -i wlan1 --hunt-handshakes -d 600 --analyze vulnerability"
-    echo
-    echo "  # Load the 'aggressive' profile and add a raw hcxdumptool option for max performance"
-    echo "  $SCRIPT_CMD -i wlan1 --profile aggressive --hcxd-opts \"--m2max=10\""
+    echo "  # Use the advanced Real-Time Display to see PMKID/EAPOL status"
+    echo "  $SCRIPT_CMD -i wlan2 --backend hcxlabtool --rds 2"
     echo
 }
 
@@ -108,37 +124,161 @@ usage() {
     SCRIPT_CMD=$(basename "$0")
     echo -e "${BLUE}Usage:${NC} $SCRIPT_CMD [OPTIONS]"
     echo
-    echo -e "${GREEN}Easy Modes / Personas:${NC}"
-    echo "  --survey                 Scan for APs without attacking or saving files."
-    echo "  --passive                Listen passively; disable all attack transmissions."
-    echo "  --enable-gps             Enable GPSD and embed coordinates into the pcapng file."
-    echo "  --hunt-handshakes        Actively deauthenticate clients to capture handshakes."
-    echo
-    echo -e "${GREEN}Core Capture Options:${NC}"
-    echo "  -i, --interface <iface>  Network interface to use."
-    echo "  -c, --channels <ch>      Comma-separated list of channels."
-    echo "  -d, --duration <sec>     Set capture duration in seconds."
-    echo "  -o, --output-dir <dir>   Directory to save capture files."
-    echo "  --bpf <filter>           Use a BPF filter by name (e.g., 'eapol-only')."
-    echo "  --auto-channels <N>      (STUB) Auto-scan and select the <N> busiest channels."
-    echo
-    echo -e "${GREEN}Workflow & Automation:${NC}"
-    echo "  --wardriving-loop <sec>  Run in a continuous loop."
-    echo "  --analyze <mode>         Run analyzer after session (modes: summary, vulnerability, export)."
-    echo "  --interactive            Start a guided interactive session."
-    echo
     echo -e "${GREEN}System & Management:${NC}"
-    echo "  --install                Install script and all components."
-    echo "  --uninstall              Remove the toolkit and all related files."
-    echo "  --update                 Check for and install updates to the toolkit."
-    echo "  --profile <name>         Load a configuration profile."
-    echo "  -v, --version            Show script version."
-    echo "  -h, --help               Show this help screen."
+    echo "  --backend <tool>       Capture engine to use (hcxdumptool|hcxlabtool). Default: hcxdumptool"
+    echo "  --install              Install script and all components."
+    echo "  --uninstall            Remove the toolkit and all related files."
+    echo "  --update               Check for and install updates to the toolkit."
+    echo "  --profile <name>       Load a configuration profile."
+    echo "  --list-profiles        List available configuration profiles."
+    echo "  --list-filters         List available BPF filter files."
+    echo "  -v, --version          Show script version."
+    echo "  -h, --help             Show this help screen."
+    echo
+    echo -e "${GREEN}Filtering Options (Mutually Exclusive):${NC}"
+    echo "  --filter-file <file>     Path to a file with full MAC addresses."
+    echo "  --filter-mode <mode>     Mode for --filter-file (whitelist|blacklist). Default: blacklist."
+    echo "  --oui-file <file>        Path to a file with 3-byte OUIs (e.g., AA:BB:CC)."
+    echo "  --oui-filter-mode <mode> Mode for --oui-file (whitelist|blacklist). Default: blacklist."
+    echo "  --bpf <file>             Path to a pre-compiled BPF filter file."
+    echo
+    echo -e "${GREEN}Standard & Advanced Modes:${NC}"
+    echo "  --hunt-handshakes      Actively deauthenticate clients to capture handshakes (hcxdumptool)."
+    echo "  --client-only-hunt     Stealthily capture client handshakes without associating with an AP (hcxlabtool)."
+    echo "  --pmkid-priority-hunt  Focus exclusively on capturing PMKIDs from APs (hcxlabtool)."
     echo
     if [ "$FULL_HELP" -eq 1 ]; then
         show_full_help
     else
         echo -e "${YELLOW}For advanced examples, run: $SCRIPT_CMD --full-help${NC}"
+    fi
+}
+
+load_profile() {
+    local profile_name="$1"
+    local profile_path="$PROFILE_DIR/$profile_name.conf"
+
+    if [ ! -f "$profile_path" ]; then
+        echo -e "${RED}Error: Profile '$profile_name' not found at '$profile_path'${NC}" >&2
+        exit 1
+    fi
+
+    echo -e "${CYAN}Loading profile: $profile_name${NC}"
+    # shellcheck source=/dev/null
+    . "$profile_path"
+}
+
+list_profiles() {
+    echo -e "${CYAN}--- Available Profiles ---${NC}"
+    if [ -d "$PROFILE_DIR" ] && [ -n "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then
+        ls -1 "$PROFILE_DIR" | sed 's/\.conf$//'
+    else
+        echo "No profiles found in $PROFILE_DIR"
+    fi
+}
+
+list_filters() {
+    echo -e "${CYAN}--- Available BPF Filters ---${NC}"
+    if [ -d "$BPF_DIR" ] && [ -n "$(ls -A "$BPF_DIR" 2>/dev/null)" ]; then
+        ls -1 "$BPF_DIR"
+    else
+        echo "No BPF filters found in $BPF_DIR"
+    fi
+}
+
+generate_bpf_from_mac_list() {
+    if [ -z "$FILTER_FILE" ]; then return; fi
+    if [ ! -f "$FILTER_FILE" ]; then
+        echo -e "${RED}Error: Filter file not found at '$FILTER_FILE'${NC}" >&2
+        exit 1
+    fi
+
+    echo -e "${CYAN}Generating BPF from MAC list: $FILTER_FILE (Mode: $FILTER_MODE)${NC}"
+    
+    local bpf_string=""
+    local mac_list
+    mac_list=$(grep -v '^[[:space:]]*#' "$FILTER_FILE" | grep -v '^[[:space:]]*$')
+
+    if [ -z "$mac_list" ]; then
+        echo -e "${YELLOW}Warning: Filter file is empty. Ignoring.${NC}"
+        return
+    fi
+    
+    while IFS= read -r mac; do
+        mac_clean=$(echo "$mac" | tr -d ':-[:space:]')
+        if [ -z "$bpf_string" ]; then
+            bpf_string="wlan addr2 $mac_clean"
+        else
+            bpf_string="$bpf_string or wlan addr2 $mac_clean"
+        fi
+    done <<EOF
+$mac_list
+EOF
+
+    if [ "$FILTER_MODE" = "blacklist" ]; then
+        bpf_string="not ($bpf_string)"
+    fi
+
+    local temp_bpf_file="/tmp/hcx_mac_filter_$$.bpf"
+    if hcxdumptool --bpfc="$bpf_string" > "$temp_bpf_file"; then
+        BPF_FILE="$temp_bpf_file"
+        echo "Successfully created temporary BPF filter."
+    else
+        echo -e "${RED}Error: Failed to compile BPF from MAC list.${NC}" >&2
+        exit 1
+    fi
+}
+
+generate_bpf_from_oui_list() {
+    if [ -z "$OUI_FILE" ]; then return; fi
+    if [ ! -f "$OUI_FILE" ]; then
+        echo -e "${RED}Error: OUI file not found at '$OUI_FILE'${NC}" >&2
+        exit 1
+    fi
+
+    echo -e "${CYAN}Generating BPF from OUI list: $OUI_FILE (Mode: $OUI_FILTER_MODE)${NC}"
+    
+    local bpf_string=""
+    local oui_list
+    oui_list=$(grep -v '^[[:space:]]*#' "$OUI_FILE" | grep -v '^[[:space:]]*$')
+
+    if [ -z "$oui_list" ]; then
+        echo -e "${YELLOW}Warning: OUI file is empty. Ignoring.${NC}"
+        return
+    fi
+    
+    while IFS= read -r oui; do
+        local octet1
+        octet1=$(echo "$oui" | cut -d: -f1 | tr 'a-f' 'A-F')
+        local octet2
+        octet2=$(echo "$oui" | cut -d: -f2 | tr 'a-f' 'A-F')
+        local octet3
+        octet3=$(echo "$oui" | cut -d: -f3 | tr 'a-f' 'A-F')
+        
+        local oui_filter_part="(wlan[10] = 0x$octet1 and wlan[11] = 0x$octet2 and wlan[12] = 0x$octet3)"
+
+        if [ -z "$bpf_string" ]; then
+            bpf_string="$oui_filter_part"
+        else
+            bpf_string="$bpf_string or $oui_filter_part"
+        fi
+    done <<EOF
+$oui_list
+EOF
+
+    bpf_string="wlan addr2 and ($bpf_string)"
+
+    if [ "$OUI_FILTER_MODE" = "blacklist" ]; then
+        bpf_string="not ($bpf_string)"
+    fi
+
+    local temp_bpf_file="/tmp/hcx_oui_filter_$$.bpf"
+    if hcxdumptool --bpfc="$bpf_string" > "$temp_bpf_file"; then
+        BPF_FILE="$temp_bpf_file"
+        echo "Successfully created temporary OUI BPF filter."
+    else
+        echo -e "${RED}Error: Failed to compile BPF from OUI list.${NC}" >&2
+        exit 1
     fi
 }
 
@@ -150,35 +290,39 @@ dependency_check() {
     echo -e "${CYAN}--- Verifying Dependencies ---${NC}"
     local error=0
 
-    if ! command -v hcxdumptool >/dev/null 2>&1; then
-        echo -e "${RED}Error: 'hcxdumptool' command not found. Is hcxdumptool-custom installed?${NC}"
-        error=1
-    elif ! hcxdumptool -v 2>/dev/null | grep -q "$REQ_HCXDUMPTOOL_VER_STR"; then
-        echo -e "${RED}Error: 'hcxdumptool' version is incorrect. Required: ~$REQ_HCXDUMPTOOL_VER_STR${NC}"
+    if ! command -v hcxpcapngtool >/dev/null 2>&1 || ! hcxpcapngtool -v 2>/dev/null | grep -q "$REQ_HCXTOOLS_VER_STR"; then
+        echo -e "${RED}Error: hcxtools-custom v$REQ_HCXTOOLS_VER_STR or newer is required.${NC}"
         error=1
     fi
 
-    if ! command -v hcxpcapngtool >/dev/null 2>&1; then
-        echo -e "${RED}Error: 'hcxpcapngtool' command not found. Is hcxtools-custom installed?${NC}"
-        error=1
-    elif ! hcxpcapngtool -v 2>/dev/null | grep -q "$REQ_HCXTOOLS_VER_STR"; then
-        echo -e "${RED}Error: 'hcxpcapngtool' version is incorrect. Required: ~$REQ_HCXTOOLS_VER_STR${NC}"
-        error=1
+    if [ "$BACKEND" = "hcxdumptool" ]; then
+        if ! command -v hcxdumptool >/dev/null 2>&1 || ! hcxdumptool -v 2>/dev/null | grep -q "$REQ_HCXDUMPTOOL_VER_STR"; then
+            echo -e "${RED}Error: hcxdumptool-custom v$REQ_HCXDUMPTOOL_VER_STR or newer is required for this backend.${NC}"
+            error=1
+        fi
+    elif [ "$BACKEND" = "hcxlabtool" ]; then
+        if ! command -v hcxlabtool >/dev/null 2>&1 || ! hcxlabtool -v 2>/dev/null | grep -q "$REQ_HCXLABTOOL_VER_STR"; then
+            echo -e "${RED}Error: hcxlabtool v$REQ_HCXLABTOOL_VER_STR or newer is required for this backend.${NC}"
+            echo -e "${YELLOW}Please install the 'hcxlabtools' package.${NC}"
+            error=1
+        fi
     fi
     
     if [ "$error" -eq 1 ]; then
         echo -e "${RED}Dependency check failed. Please resolve the issues.${NC}"
         exit 1
     fi
-    echo -e "${GREEN}Dependencies verified successfully.${NC}"
+    echo -e "${GREEN}Dependencies verified successfully for backend: $BACKEND${NC}"
 }
 
 install_script() {
-    echo -e "${BLUE}=== Installing HCX Toolkit v${SCRIPT_VERSION} ===${NC}"
+    echo -e "${BLUE}=== Installing HCX Toolkit v7.0.0 \"Hydra\" ===${NC}"
     local script_dir
     script_dir=$(dirname "$0")
 
-    dependency_check
+    if ! command -v hcxdumptool >/dev/null 2>&1; then echo -e "${RED}Default package 'hcxdumptool-custom' not found.${NC}"; exit 1; fi
+    if ! command -v hcxpcapngtool >/dev/null 2>&1; then echo -e "${RED}Core package 'hcxtools-custom' not found.${NC}"; exit 1; fi
+
     mkdir -p "$INSTALL_DIR" "$OUTPUT_DIR" "$PROFILE_DIR" "$BPF_DIR"
     
     echo "Installing launcher to $INSTALL_BIN..."
@@ -187,6 +331,15 @@ install_script() {
     if [ -f "$script_dir/hcx-analyzer.sh" ]; then
         echo "Installing analyzer to $ANALYZER_BIN..."
         cp "$script_dir/hcx-analyzer.sh" "$ANALYZER_BIN" && chmod +x "$ANALYZER_BIN"
+    fi
+
+    if [ -d "$script_dir/examples/profiles" ]; then
+        echo "Installing example profiles..."
+        cp "$script_dir"/examples/profiles/*.conf "$PROFILE_DIR/"
+    fi
+    if [ -d "$script_dir/bpf-filters" ]; then
+        echo "Installing BPF filters..."
+        cp "$script_dir"/bpf-filters/*.bpf "$BPF_DIR/"
     fi
 
     if [ -f "$script_dir/hcxscript.conf" ]; then
@@ -209,7 +362,7 @@ install_script() {
 EOF
     fi
 
-    echo "$SCRIPT_VERSION" > "$INSTALL_DIR/VERSION"
+    echo "7.0.0" > "$VERSION_FILE"
     touch "$LOG_FILE"
     echo -e "${GREEN}Installation complete! Run 'hcxdumptool-launcher' and 'hcx-analyzer.sh' from anywhere.${NC}"
 }
@@ -240,9 +393,8 @@ uninstall_script() {
 
 update_script() {
     echo -e "${BLUE}=== Checking for updates... ===${NC}"
-    # --- FIX: Clean up potential newlines and carriage returns from wget output ---
     local remote_version_line
-    remote_version_line=$(wget -qO- "$UPDATE_URL" | grep 'readonly SCRIPT_VERSION=')
+    remote_version_line=$(wget -qO- "$UPDATE_URL" | grep 'SCRIPT_VERSION="')
     REMOTE_VERSION=$(echo "$remote_version_line" | cut -d'"' -f2 | tr -d '\n\r')
 
     if [ -z "$REMOTE_VERSION" ]; then
@@ -255,6 +407,7 @@ update_script() {
     else
         echo -e "${YELLOW}A new version ($REMOTE_VERSION) is available. Updating...${NC}"
         wget -qO "$INSTALL_BIN" "$UPDATE_URL" && chmod +x "$INSTALL_BIN"
+        echo "$REMOTE_VERSION" > "$VERSION_FILE"
         echo -e "${GREEN}Update complete!${NC}"
     fi
 }
@@ -263,7 +416,7 @@ pre_flight_checks() {
     if [ -z "$INTERFACE" ]; then
         echo -e "${YELLOW}No interface specified.${NC}"
         if [ "$INTERACTIVE_MODE" -ne 1 ]; then
-            read -r -p "Please enter the network interface to use (e.g., wlan1): " INTERFACE
+            read -r -p "Please enter the network interface to use (e.g., wlan2): " INTERFACE
             if [ -z "$INTERFACE" ]; then
                 echo -e "${RED}Interface cannot be empty. Aborting.${NC}" >&2
                 exit 1
@@ -286,76 +439,55 @@ pre_flight_checks() {
 start_capture() {
     local output_file="$1"
     local duration="$2"
-    local HCX_CMD="hcxdumptool -i $INTERFACE"
+    local HCX_CMD="$BACKEND -i $INTERFACE"
 
-    if [ "$SURVEY_MODE" -eq 1 ]; then
-        HCX_CMD="$HCX_CMD -F --rcascan=a"
-    else
-        if [ -z "$output_file" ]; then
-            echo -e "${RED}Internal Error: Output file not specified for capture.${NC}" >&2
-            return 1
-        fi
+    # Common options for both backends
+    if [ "$SURVEY_MODE" -ne 1 ]; then
+        if [ -z "$output_file" ]; then echo -e "${RED}Internal Error: Output file not specified.${NC}" >&2; return 1; fi
         HCX_CMD="$HCX_CMD -w \"$output_file\""
     fi
-
-    if [ "$HUNT_HANDSHAKES" -eq 1 ]; then
-        echo -e "${YELLOW}Handshake hunting enabled (default active attack mode).${NC}"
-    fi
-    
-    if [ "$AUTO_CHANNELS" -gt 0 ]; then
-        echo -e "${YELLOW}Warning: --auto-channels is a stub. It is not yet implemented. Using manual channels or -F.${NC}"
-    fi
-    
-    if [ -n "$CHANNELS" ]; then
-        HCX_CMD="$HCX_CMD -c $CHANNELS"
-    elif [ "$SURVEY_MODE" -ne 1 ]; then
-        HCX_CMD="$HCX_CMD -F"
-    fi
-
+    if [ -n "$CHANNELS" ]; then HCX_CMD="$HCX_CMD -c $CHANNELS"; else HCX_CMD="$HCX_CMD -F"; fi
+    if [ -n "$STAY_TIME" ]; then HCX_CMD="$HCX_CMD -t $STAY_TIME"; fi
     if [ -n "$BPF_FILE" ]; then
-        if [ -f "$BPF_DIR/$BPF_FILE.bpf" ]; then
-            HCX_CMD="$HCX_CMD --bpf=\"$BPF_DIR/$BPF_FILE.bpf\""
-        elif [ -f "$BPF_FILE" ]; then
-            HCX_CMD="$HCX_CMD --bpf=\"$BPF_FILE\""
+        if [ -f "$BPF_FILE" ]; then HCX_CMD="$HCX_CMD --bpf=\"$BPF_FILE\"";
+        else echo -e "${YELLOW}Warning: BPF filter '$BPF_FILE' not found.${NC}"; fi
+    fi
+    if [ "$ENABLE_GPS" -eq 1 ]; then HCX_CMD="$HCX_CMD --gpsd --nmea_pcapng"; fi
+    
+    if [ "$BACKEND" = "hcxdumptool" ]; then
+        if [ "$RDS_MODE" -gt 0 ]; then
+             echo -e "${YELLOW}Warning: --rds flag has no effect on the hcxdumptool backend.${NC}"
+        fi
+        if [ "$SURVEY_MODE" -eq 1 ]; then HCX_CMD="$HCX_CMD --rcascan=a"; fi
+        if [ "$PASSIVE_MODE" -eq 1 ]; then HCX_CMD="$HCX_CMD --attemptapmax=0"; fi
+    elif [ "$BACKEND" = "hcxlabtool" ]; then
+        if [ "$CLIENT_ONLY_HUNT" -eq 1 ]; then HCX_CMD="$HCX_CMD --associationmax=0"; fi
+        if [ "$PMKID_PRIORITY_HUNT" -eq 1 ]; then HCX_CMD="$HCX_CMD --m2max=0 --associationmax=100"; fi
+        if [ "$TIME_WARP_ATTACK" -eq 1 ]; then HCX_CMD="$HCX_CMD --ftc"; fi
+        
+        if [ "$RDS_MODE" -gt 0 ]; then
+            HCX_CMD="$HCX_CMD --rds=$RDS_MODE"
         else
-             echo -e "${YELLOW}Warning: BPF filter '$BPF_FILE' not found.${NC}"
+            HCX_CMD="$HCX_CMD --rds=3"
         fi
     fi
 
-    if [ -n "$STAY_TIME" ]; then
-        HCX_CMD="$HCX_CMD -t $STAY_TIME"
-    fi
-    
-    if [ "$PASSIVE_MODE" -eq 1 ]; then
-        HCX_CMD="$HCX_CMD --attemptapmax=0"
-    fi
-
-    if [ "$ENABLE_GPS" -eq 1 ]; then
-        HCX_CMD="$HCX_CMD --gpsd --nmea_pcapng"
-    fi
-
-    if [ -n "$HCXD_OPTS" ]; then
-        HCX_CMD="$HCX_CMD $HCXD_OPTS"
-    fi
+    if [ -n "$HCXD_OPTS" ]; then HCX_CMD="$HCX_CMD $HCXD_OPTS"; fi
 
     echo "$output_file" >> "$TEMP_FILE"
-    
     log_message "Executing: $HCX_CMD"
     eval "$HCX_CMD" &
-    HCXDUMPTOOL_PID=$!
+    HCX_PID=$!
     
     if [ -n "$duration" ]; then
         sleep "$duration"
-        if kill -0 "$HCXDUMPTOOL_PID" 2>/dev/null; then kill "$HCXDUMPTOOL_PID"; fi
+        if kill -0 "$HCX_PID" 2>/dev/null; then kill "$HCX_PID"; fi
     fi
     
-    wait "$HCXDUMPTOOL_PID" 2>/dev/null
+    wait "$HCX_PID" 2>/dev/null
     
-    if ! kill -0 "$HCXDUMPTOOL_PID" 2>/dev/null; then
-        echo -e "${YELLOW}\nProcess finished.${NC}"
-    else
-        echo -e "${RED}\nError: Process did not terminate cleanly.${NC}"
-    fi
+    if ! kill -0 "$HCX_PID" 2>/dev/null; then echo -e "${YELLOW}\nProcess finished.${NC}";
+    else echo -e "${RED}\nError: Process did not terminate cleanly.${NC}"; fi
 }
 
 cleanup() {
@@ -363,17 +495,14 @@ cleanup() {
     if [ "$QUIET" -eq 0 ]; then
         echo -e "\n${CYAN}--- Cleaning up ---${NC}"
     fi
-    if [ -n "$HCXDUMPTOOL_PID" ]; then kill "$HCXDUMPTOOL_PID" 2>/dev/null; fi
+    if [ -n "$HCX_PID" ]; then kill "$HCX_PID" 2>/dev/null; fi
     
     if [ "$START_TIME" -ne 0 ]; then
         local END_TIME
         END_TIME=$(date +%s)
-        local ELAPSED_SECONDS
-        ELAPSED_SECONDS=$((END_TIME - START_TIME))
-        local MINUTES
-        MINUTES=$((ELAPSED_SECONDS / 60))
-        local SECONDS
-        SECONDS=$((ELAPSED_SECONDS % 60))
+        local ELAPSED_SECONDS=$((END_TIME - START_TIME))
+        local MINUTES=$((ELAPSED_SECONDS / 60))
+        local SECONDS=$((ELAPSED_SECONDS % 60))
         echo -e "  - Total session runtime: ${MINUTES}m ${SECONDS}s."
     fi
     
@@ -393,11 +522,8 @@ cleanup() {
                 local temp_hash_output="/tmp/cleanup_hashes.tmp"
                 >"$temp_hash_output"
                 hcxpcapngtool $SESSION_FILES -o "$temp_hash_output" >/dev/null 2>&1
-                if [ -s "$temp_hash_output" ]; then
-                    hash_count=$(wc -l < "$temp_hash_output")
-                fi
+                if [ -s "$temp_hash_output" ]; then hash_count=$(wc -l < "$temp_hash_output"); fi
                 rm -f "$temp_hash_output"
-                
                 echo -e "  - ${GREEN}${hash_count}${NC} potential handshakes/PMKIDs extracted."
                 echo -e "  - Run '${CYAN}hcx-analyzer.sh${NC}' to perform a full analysis."
             fi
@@ -420,17 +546,22 @@ trap cleanup INT TERM
 interactive_mode() {
     echo -e "${CYAN}--- Interactive Mode ---${NC}"
     
-    read -r -p "Enter the network interface (e.g., wlan1): " INTERFACE
+    read -r -p "Enter the network interface (e.g., wlan2): " INTERFACE
     if [ -z "$INTERFACE" ]; then echo "${RED}Interface cannot be empty.${NC}"; exit 1; fi
 
     echo "Select a capture mode:"
-    echo "  1. Passive Survey (no attacks)"
-    echo "  2. Handshake Hunt (active deauth)"
-    read -r -p "Choice [1-2]: " mode_choice
+    echo "  1) Standard Handshake Hunt (hcxdumptool)"
+    echo "  2) Passive Scan (hcxdumptool)"
+    echo "  3) Client-Only Stealth Hunt (hcxlabtool)"
+    echo "  4) PMKID Priority Hunt (hcxlabtool)"
+    printf "Choice [1-4]: "
+    read -r mode_choice
 
     case "$mode_choice" in
-        1) SURVEY_MODE=1;;
-        2) HUNT_HANDSHAKES=1;;
+        1) HUNT_HANDSHAKES=1; BACKEND="hcxdumptool";;
+        2) PASSIVE_MODE=1; BACKEND="hcxdumptool";;
+        3) CLIENT_ONLY_HUNT=1; BACKEND="hcxlabtool";;
+        4) PMKID_PRIORITY_HUNT=1; BACKEND="hcxlabtool";;
         *) echo "${RED}Invalid choice.${NC}"; exit 1;;
     esac
 
@@ -464,28 +595,7 @@ run_main_workflow() {
 #==============================================================================
 
 main() {
-    local has_auto_channels=0
-    local has_interface=0
-    for arg in "$@"; do
-        if [ "$arg" = "--auto-channels" ]; then
-            has_auto_channels=1
-        fi
-        if [ "$arg" = "-i" ] || [ "$arg" = "--interface" ]; then
-            has_interface=1
-        fi
-    done
-
-    if [ "$has_auto_channels" -eq 1 ] && [ "$has_interface" -eq 0 ]; then
-        echo -e "${RED}Error: --auto-channels requires a network interface to be specified.${NC}" >&2
-        echo "Usage: $0 --auto-channels <N> -i <interface>" >&2
-        exit 1
-    fi
-    
-    if [ -f "$CONFIG_FILE" ]; then
-        . "$CONFIG_FILE"
-    fi
-
-    if [ $# -eq 0 ] && [ ! -f "$INSTALL_BIN" ]; then
+    if [ "$(basename "$0")" != "hcxdumptool-launcher" ] && [ ! -f "$INSTALL_BIN" ]; then
         show_banner
         install_script
         exit 0
@@ -499,26 +609,49 @@ main() {
             --install) install_script; exit 0;;
             --uninstall) uninstall_script; exit 0;;
             --update) update_script; exit 0;;
-            --profile) if [ -z "$2" ]; then echo "${RED}Error: --profile requires a name.${NC}" >&2; exit 1; fi; load_profile "$2"; shift 2;;
+            --list-profiles) list_profiles; exit 0;;
+            --list-filters) list_filters; exit 0;;
+            --profile) load_profile "$2"; shift 2;;
             -i|--interface) INTERFACE="$2"; shift 2;;
             -c|--channels) CHANNELS="$2"; shift 2;;
             -d|--duration) DURATION="$2"; shift 2;;
             -o|--output-dir) OUTPUT_DIR="$2"; shift 2;;
             --bpf) BPF_FILE="$2"; shift 2;;
+            --filter-file) FILTER_FILE="$2"; shift 2;;
+            --filter-mode)
+                FILTER_MODE="$2"
+                if [ "$FILTER_MODE" != "whitelist" ] && [ "$FILTER_MODE" != "blacklist" ]; then
+                    echo -e "${RED}Error: Invalid filter mode '$FILTER_MODE'. Use 'whitelist' or 'blacklist'.${NC}" >&2
+                    exit 1
+                fi
+                shift 2;;
+            --oui-file) OUI_FILE="$2"; shift 2;;
+            --oui-filter-mode) OUI_FILTER_MODE="$2"; shift 2;;
             --stay-time) STAY_TIME="$2"; shift 2;;
             --wardriving-loop) WARDRIVING_LOOP="$2"; shift 2;;
-            --hunt-handshakes) HUNT_HANDSHAKES=1; shift;;
             --analyze)
-                if [ -z "$2" ] || ! echo "$2" | grep -qE '^(summary|vulnerability|export)$'; then
-                    echo -e "${RED}Error: --analyze requires a mode: summary, vulnerability, or export.${NC}" >&2; exit 1
+                if [ -z "$2" ] || ! echo "$2" | grep -qE '^(summary|intel|vuln|export|geotrack|remote-crack)$'; then
+                    echo -e "${RED}Error: --analyze requires a mode: summary, intel, vuln, export, geotrack, or remote-crack.${NC}" >&2; exit 1
                 fi
                 RUN_ANALYSIS="$2"; shift 2;;
             --hcxd-opts) HCXD_OPTS="$HCXD_OPTS $2"; shift 2;;
             --interactive) INTERACTIVE_MODE=1; shift;;
             --auto-channels) AUTO_CHANNELS="$2"; shift 2;;
-            --survey) SURVEY_MODE=1; shift;;
-            --passive) PASSIVE_MODE=1; shift;;
             --enable-gps) ENABLE_GPS=1; shift;;
+            --rds) RDS_MODE="$2"; shift 2;;
+            --backend)
+                BACKEND="$2"
+                if [ "$BACKEND" != "hcxdumptool" ] && [ "$BACKEND" != "hcxlabtool" ]; then
+                    echo -e "${RED}Error: Invalid backend '$BACKEND'. Use 'hcxdumptool' or 'hcxlabtool'.${NC}" >&2
+                    exit 1
+                fi
+                shift 2;;
+            --hunt-handshakes) HUNT_HANDSHAKES=1; shift;;
+            --passive) PASSIVE_MODE=1; shift;;
+            --survey) SURVEY_MODE=1; shift;;
+            --client-only-hunt) CLIENT_ONLY_HUNT=1; BACKEND="hcxlabtool"; shift;;
+            --pmkid-priority-hunt) PMKID_PRIORITY_HUNT=1; BACKEND="hcxlabtool"; shift;;
+            --time-warp-attack) TIME_WARP_ATTACK=1; BACKEND="hcxlabtool"; shift;;
             *)
                 echo -e "${RED}Unknown option: '$1'${NC}" >&2
                 usage
@@ -526,18 +659,25 @@ main() {
                 ;;
         esac
     done
-
-    log_message "Launcher started."
-    if [ "$QUIET" -eq 0 ]; then
-        show_banner
+    
+    if [ -n "$FILTER_FILE" ] && [ -n "$OUI_FILE" ]; then
+        echo -e "${RED}Error: Cannot use --filter-file and --oui-file at the same time.${NC}" >&2
+        exit 1
     fi
-
-    dependency_check
-
-    if [ "$INTERACTIVE_MODE" -eq 1 ]; then
-        interactive_mode
+    if [ -n "$BPF_FILE" ] && ( [ -n "$FILTER_FILE" ] || [ -n "$OUI_FILE" ] ); then
+         echo -e "${RED}Error: Cannot use a pre-compiled BPF with dynamic MAC/OUI filters.${NC}" >&2
+         exit 1
     fi
     
+    log_message "Launcher started."
+    if [ "$QUIET" -eq 0 ]; then show_banner; fi
+    
+    dependency_check
+    
+    generate_bpf_from_mac_list
+    generate_bpf_from_oui_list
+
+    if [ "$INTERACTIVE_MODE" -eq 1 ]; then interactive_mode; fi
     pre_flight_checks
 
     if [ "$QUIET" -eq 0 ]; then
@@ -549,7 +689,6 @@ main() {
     >"$TEMP_FILE"
     
     START_TIME=$(date +%s)
-    
     run_main_workflow
 }
 

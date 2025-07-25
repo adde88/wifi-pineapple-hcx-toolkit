@@ -27,5 +27,5 @@ First, you need to install the toolkit and its dependencies on your WiFi Pineapp
 The easiest way to start is with a simple survey scan to see what networks are around you without performing any attacks.
 
 ```bash
-# Run a survey scan using your wireless interface (e.g., wlan1)
-hcxdumptool-launcher -i wlan1 --survey
+# Run a survey scan using your wireless interface (e.g., wlan2)
+hcxdumptool-launcher -i wlan2 --survey

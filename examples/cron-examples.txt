@@ -51,8 +51,8 @@
 0 */6 * * * /usr/bin/hcxdumptool-launcher -d 3600 -q && /root/post-capture-analysis.sh
 
 # Different interfaces at different times
-0 8 * * * /usr/bin/hcxdumptool-launcher -i wlan0 -d 3600 -q
-0 20 * * * /usr/bin/hcxdumptool-launcher -i wlan2 -d 3600 -q
+0 8 * * * /usr/bin/hcxdumptool-launcher -i wlan2 -d 3600 -q
+0 20 * * * /usr/bin/hcxdumptool-launcher -i wlan3 -d 3600 -q
 
 # Conditional capture (only if interface is available)
 */30 * * * * [ -d /sys/class/net/wlan2 ] && /usr/bin/hcxdumptool-launcher -i wlan2 -d 1200 -q
@@ -64,7 +64,6 @@
 
 # Daily compression of yesterday's captures
 0 1 * * * find /root/hcxdumps -name "*$(date -d yesterday +%Y%m%d)*.pcapng" -exec gzip {} \;
-
 # === TIPS ===
 # - Use -q (quiet) flag for cron jobs to reduce log spam
 # - Use --rotate-size for long captures to manage file sizes
