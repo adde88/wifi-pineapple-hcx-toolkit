@@ -30,6 +30,15 @@ else
     SCRIPT_VERSION="7.1.0" # Fallback for standalone execution
 fi
 
+# NEW: Sanity check to ensure the version file isn't corrupt.
+case "$SCRIPT_VERSION" in
+    *[!0-9.]*)
+        printf "${RED}Error: The VERSION file at %s is corrupt.${NC}\n" "$VERSION_FILE"
+        printf "Please fix it manually. Expected format: X.Y.Z\n"
+        exit 1
+        ;;
+esac
+
 #--- Tool Requirements ---#
 readonly REQ_HCXDUMPTOOL_VER_STR="v21.02.0"
 readonly REQ_HCXTOOLS_VER_STR="6.2.7"
@@ -553,7 +562,7 @@ uninstall_script() {
 update_script() {
     echo -e "${BLUE}=== Checking for updates... ===${NC}"
     local remote_version_line
-    remote_version_line=$(wget -qO- "$UPDATE_URL" 2>/dev/null | grep 'SCRIPT_VERSION=')
+    remote_version_line=$(wget -qO- "$UPDATE_URL" 2>/dev/null | grep 'SCRIPT_VERSION="')
     # shellcheck disable=SC2181
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: Could not download update information. Please check internet connection.${NC}"
@@ -563,13 +572,16 @@ update_script() {
     local REMOTE_VERSION
     REMOTE_VERSION=$(echo "$remote_version_line" | cut -d'"' -f2 | tr -d '\n\r')
 
-    if [ -z "$REMOTE_VERSION" ]; then
-        echo -e "${RED}Error: Could not parse remote version.${NC}"
-        exit 1
-    fi
+    # NEW: Sanity check the fetched version number
+    case "$REMOTE_VERSION" in
+        ""|*[!0-9.]*)
+            echo -e "${RED}Error: Could not parse a valid remote version. Got: '$REMOTE_VERSION'${NC}"
+            exit 1
+            ;;
+    esac
 
     if [ "$REMOTE_VERSION" = "$SCRIPT_VERSION" ]; then
-        echo -e "${GREEN}You are already running the latest version ($SCRIPT_VERSION).${NC}"
+        printf "${GREEN}You are already running the latest version (%s).${NC}\n" "$SCRIPT_VERSION"
     else
         printf "${YELLOW}A new version (%s) is available. Updating...${NC}\n" "$REMOTE_VERSION"
         if wget -qO "$INSTALL_BIN.tmp" "$UPDATE_URL"; then
