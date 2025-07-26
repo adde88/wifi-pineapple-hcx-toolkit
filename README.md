@@ -50,11 +50,11 @@ The completely overhauled `hcx-analyzer.sh` script is the heart of the toolkit, 
 
 ## Requirements
 * A WiFi Pineapple MKVII or other OpenWrt-based device.
-* **hcxdumptool-custom**: v21.02.0 or newer.
-* **hcxtools-custom**: v6.2.7-1 or newer.
+* **hcxdumptool-custom**: v21.02.0 / 6.3.4 (specifically)
+* **hcxtools-custom**: v6.2.7 (specifically)
 * **hcxlabtool** (Optional, for advanced backend): v7.0 or newer.
 * `git` and `opkg` for installation.
-* Root access.
+* root access.
 
 ### Support This Project
 If you find this project helpful, please consider supporting its continued development:
