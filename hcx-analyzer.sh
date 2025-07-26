@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# HCX Advanced Analyzer
+# HCX Advanced Analyzer - v7.0.0 "Hydra"
 #
 # (C) 2025 Andreas Nilsen. All rights reserved.
 
@@ -8,26 +8,18 @@
 # INITIALIZATION & CONFIGURATION
 #==============================================================================
 
+# --- Script Version ---
+ANALYZER_VERSION="7.0.0 \"Hydra\""
+
 # --- System & Path Configuration ---
-readonly INSTALL_DIR="/etc/hcxtools"
-readonly VERSION_FILE="$INSTALL_DIR/VERSION"
-
-# --- Dynamically read script version ---
-if [ -f "$VERSION_FILE" ]; then
-    ANALYZER_VERSION=$(cat "$VERSION_FILE")" \"Hydra\""
-else
-    ANALYZER_VERSION="7.0.0 \"Hydra\"" # Fallback for standalone execution
-fi
-
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then
-    # shellcheck source=/dev/null
     . "/etc/hcxtools/hcxscript.conf"
 fi
 
 # --- Local Paths ---
 CAPTURE_DIR=${OUTPUT_DIR:-"/root/hcxdumps"}
 ANALYSIS_DIR="/root/hcx-analysis"
-DB_DIR="/root/hcxdump"
+DB_DIR="/root/hcxdumps"
 DB_FILE="$DB_DIR/database.db"
 mkdir -p "$ANALYSIS_DIR"
 mkdir -p "$DB_DIR"
