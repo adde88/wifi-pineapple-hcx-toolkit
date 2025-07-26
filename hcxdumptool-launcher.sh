@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# hcxdumptool-launcher - An advanced automation framework for hcxdumptool & hcxlabtool.
+# v7.1.0 "Hydra-Intel"
 # Author: Andreas Nilsen
-# Github: https://www.github.com/adde88
+# Github: https://www.github.com/ZerBea/hcxtools
 #
 # This script is designed to work with the custom packages from:
 # https://github.com/adde88/openwrt-useful-tools
@@ -27,7 +27,7 @@ readonly WIRELESS_CONFIG_BACKUP="/etc/config/wireless.hcx-backup"
 if [ -f "$VERSION_FILE" ]; then
     SCRIPT_VERSION=$(cat "$VERSION_FILE")
 else
-    SCRIPT_VERSION="7.0.0" # Fallback for standalone execution
+    SCRIPT_VERSION="7.1.0" # Fallback for standalone execution
 fi
 
 #--- Tool Requirements ---#
@@ -44,14 +44,12 @@ INTERFACE=""
 CHANNELS=""
 DURATION=""
 OUTPUT_DIR="/root/hcxdumps"
-RUN_ANALYSIS=""
 PROFILE=""
 BPF_FILE=""
 STAY_TIME=""
 HCXD_OPTS=""
 QUIET=0
 INTERACTIVE_MODE=0
-AUTO_CHANNELS=0
 RESTORE_INTERFACE=1
 ENABLE_GPS=0
 FULL_HELP=0
@@ -62,7 +60,7 @@ FILTER_MODE="blacklist"
 OUI_FILE=""
 OUI_FILTER_MODE="blacklist"
 
-#--- New v6.0.0 Settings ---
+#--- v6.0.0 Settings ---
 BACKEND="hcxdumptool" # Default backend
 PASSIVE_MODE=0
 SURVEY_MODE=0
@@ -70,6 +68,10 @@ HUNT_HANDSHAKES=0
 CLIENT_ONLY_HUNT=0
 PMKID_PRIORITY_HUNT=0
 TIME_WARP_ATTACK=0
+
+#--- v7.1.0+ "Hydra-Intel" Settings ---
+LIVE_DB_LOG=0
+LIVE_LOG_FILE="/tmp/hcx_live_survey.log"
 
 #--- Runtime Variables ---#
 HCX_PID=0
@@ -119,6 +121,10 @@ show_full_help() {
     echo "  # Use the advanced Real-Time Display to see PMKID/EAPOL status"
     echo "  $SCRIPT_CMD -i wlan2 --backend hcxlabtool --rds 2"
     echo
+    echo
+    echo "  # Create a live survey log for advanced database analysis"
+    echo "  $SCRIPT_CMD -i wlan2 --live-db-log -d 600"
+    echo
 }
 
 usage() {
@@ -150,6 +156,7 @@ usage() {
     echo "  --hunt-handshakes      Actively deauthenticate clients to capture handshakes (hcxdumptool)."
     echo "  --client-only-hunt     Stealthily capture client handshakes without associating with an AP (hcxlabtool)."
     echo "  --pmkid-priority-hunt  Focus exclusively on capturing PMKIDs from APs (hcxlabtool)."
+    echo "  --live-db-log          Enable live network data logging for advanced DB analysis (requires --backend hcxlabtool)."
     echo
     if [ "$FULL_HELP" -eq 1 ]; then
         show_full_help
@@ -493,7 +500,7 @@ config wifi-iface
     option disabled '0'
 EOF
 
-    echo "7.0.0" > "$VERSION_FILE"
+    echo "7.1.0" > "$VERSION_FILE"
     touch "$LOG_FILE"
     echo -e "${GREEN}Installation complete!${NC}"
     
@@ -546,21 +553,34 @@ uninstall_script() {
 update_script() {
     echo -e "${BLUE}=== Checking for updates... ===${NC}"
     local remote_version_line
-    remote_version_line=$(wget -qO- "$UPDATE_URL" | grep 'SCRIPT_VERSION=')
+    remote_version_line=$(wget -qO- "$UPDATE_URL" 2>/dev/null | grep 'SCRIPT_VERSION=')
+    # shellcheck disable=SC2181
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: Could not download update information. Please check internet connection.${NC}"
+        exit 1
+    fi
+    
+    local REMOTE_VERSION
     REMOTE_VERSION=$(echo "$remote_version_line" | cut -d'"' -f2 | tr -d '\n\r')
 
     if [ -z "$REMOTE_VERSION" ]; then
-        echo -e "${RED}Error: Could not fetch remote version.${NC}"
+        echo -e "${RED}Error: Could not parse remote version.${NC}"
         exit 1
     fi
 
     if [ "$REMOTE_VERSION" = "$SCRIPT_VERSION" ]; then
         echo -e "${GREEN}You are already running the latest version ($SCRIPT_VERSION).${NC}"
     else
-        echo -e "${YELLOW}A new version ($REMOTE_VERSION) is available. Updating...${NC}"
-        wget -qO "$INSTALL_BIN" "$UPDATE_URL" && chmod +x "$INSTALL_BIN"
-        echo "$REMOTE_VERSION" > "$VERSION_FILE"
-        echo -e "${GREEN}Update complete!${NC}"
+        printf "${YELLOW}A new version (%s) is available. Updating...${NC}\n" "$REMOTE_VERSION"
+        if wget -qO "$INSTALL_BIN.tmp" "$UPDATE_URL"; then
+            mv "$INSTALL_BIN.tmp" "$INSTALL_BIN"
+            chmod +x "$INSTALL_BIN"
+            echo "$REMOTE_VERSION" > "$VERSION_FILE"
+            echo -e "${GREEN}Update complete!${NC}"
+        else
+            echo -e "${RED}Error: Failed to download the new version.${NC}"
+            rm -f "$INSTALL_BIN.tmp"
+        fi
     fi
 }
 
@@ -653,9 +673,19 @@ pre_flight_checks() {
 start_capture() {
     local output_file="$1"
     local duration="$2"
+
+    if [ "$LIVE_DB_LOG" -eq 1 ]; then
+        if [ "$BACKEND" != "hcxlabtool" ]; then
+            echo -e "${YELLOW}Warning: --live-db-log requires the hcxlabtool backend. Overriding.${NC}" >&2
+            BACKEND="hcxlabtool"
+        fi
+        HCXD_OPTS="$HCXD_OPTS --rds=1"
+        echo -e "${CYAN}Live DB logging enabled. Survey data will be saved to ${LIVE_LOG_FILE}${NC}"
+        rm -f "$LIVE_LOG_FILE"
+    fi
+
     local HCX_CMD="$BACKEND -i $INTERFACE"
 
-    # Common options for both backends
     if [ "$SURVEY_MODE" -ne 1 ]; then
         if [ -z "$output_file" ]; then echo -e "${RED}Internal Error: Output file not specified.${NC}" >&2; return 1; fi
         HCX_CMD="$HCX_CMD -w \"$output_file\""
@@ -679,10 +709,10 @@ start_capture() {
         if [ "$PMKID_PRIORITY_HUNT" -eq 1 ]; then HCX_CMD="$HCX_CMD --m2max=0 --associationmax=100"; fi
         if [ "$TIME_WARP_ATTACK" -eq 1 ]; then HCX_CMD="$HCX_CMD --ftc"; fi
         
-        if [ "$RDS_MODE" -gt 0 ]; then
+        if [ "$LIVE_DB_LOG" -ne 1 ] && [ "$RDS_MODE" -gt 0 ]; then
             HCX_CMD="$HCX_CMD --rds=$RDS_MODE"
-        else
-            HCX_CMD="$HCX_CMD --rds=3"
+        elif [ "$LIVE_DB_LOG" -ne 1 ]; then
+             HCX_CMD="$HCX_CMD --rds=3"
         fi
     fi
 
@@ -690,7 +720,13 @@ start_capture() {
 
     echo "$output_file" >> "$TEMP_FILE"
     log_message "Executing: $HCX_CMD"
-    eval "$HCX_CMD" &
+    
+    if [ "$LIVE_DB_LOG" -eq 1 ]; then
+        eval "$HCX_CMD" > "$LIVE_LOG_FILE" 2>&1 &
+    else
+        eval "$HCX_CMD" &
+    fi
+
     HCX_PID=$!
     
     if [ -n "$duration" ]; then
@@ -720,28 +756,9 @@ cleanup() {
         echo -e "  - Total session runtime: ${MINUTES}m ${SECONDS}s."
     fi
     
-    local SESSION_FILES
-    SESSION_FILES=$(cat "$TEMP_FILE" 2>/dev/null)
-    
     if [ "$SURVEY_MODE" -ne 1 ]; then
-        if [ -n "$RUN_ANALYSIS" ]; then
-            if command -v "$ANALYZER_BIN" >/dev/null 2>&1; then
-                echo -e "\n${CYAN}--- Running Post-Scan Analysis (Mode: $RUN_ANALYSIS) ---${NC}"
-                "$ANALYZER_BIN" --mode="$RUN_ANALYSIS" "$SESSION_FILES"
-            fi
-        else
-            echo -e "\n${GREEN}Capture complete!${NC}"
-            if [ -n "$SESSION_FILES" ]; then
-                local hash_count=0
-                local temp_hash_output="/tmp/cleanup_hashes.tmp"
-                >"$temp_hash_output"
-                hcxpcapngtool $SESSION_FILES -o "$temp_hash_output" >/dev/null 2>&1
-                if [ -s "$temp_hash_output" ]; then hash_count=$(wc -l < "$temp_hash_output"); fi
-                rm -f "$temp_hash_output"
-                echo -e "  - ${GREEN}${hash_count}${NC} potential handshakes/PMKIDs extracted."
-                echo -e "  - Run '${CYAN}hcx-analyzer.sh${NC}' to perform a full analysis."
-            fi
-        fi
+        echo -e "\n${GREEN}Capture complete!${NC}"
+        echo -e "  - Run '${CYAN}hcx-analyzer.sh${NC}' to perform a full analysis."
     fi
 
     if [ "$RESTORE_INTERFACE" -eq 1 ]; then
@@ -768,7 +785,8 @@ interactive_mode() {
     echo "  2) Passive Scan (hcxdumptool)"
     echo "  3) Client-Only Stealth Hunt (hcxlabtool)"
     echo "  4) PMKID Priority Hunt (hcxlabtool)"
-    printf "Choice [1-4]: "
+    echo "  5) Live DB Logging Hunt (hcxlabtool)"
+    printf "Choice [1-5]: "
     read -r mode_choice
 
     case "$mode_choice" in
@@ -776,6 +794,7 @@ interactive_mode() {
         2) PASSIVE_MODE=1; BACKEND="hcxdumptool";;
         3) CLIENT_ONLY_HUNT=1; BACKEND="hcxlabtool";;
         4) PMKID_PRIORITY_HUNT=1; BACKEND="hcxlabtool";;
+        5) LIVE_DB_LOG=1; BACKEND="hcxlabtool";;
         *) echo "${RED}Invalid choice.${NC}"; exit 1;;
     esac
 
@@ -845,15 +864,10 @@ main() {
             --oui-filter-mode) OUI_FILTER_MODE="$2"; shift 2;;
             --stay-time) STAY_TIME="$2"; shift 2;;
             --wardriving-loop) WARDRIVING_LOOP="$2"; shift 2;;
-            --analyze)
-                if [ -z "$2" ] || ! echo "$2" | grep -qE '^(summary|intel|vuln|export|geotrack|remote-crack)$'; then
-                    echo -e "${RED}Error: --analyze requires a mode: summary, intel, vuln, export, geotrack, or remote-crack.${NC}" >&2; exit 1
-                fi
-                RUN_ANALYSIS="$2"; shift 2;;
             --hcxd-opts) HCXD_OPTS="$HCXD_OPTS $2"; shift 2;;
             --interactive) INTERACTIVE_MODE=1; shift;;
-            --auto-channels) AUTO_CHANNELS="$2"; shift 2;;
             --enable-gps) ENABLE_GPS=1; shift;;
+            --live-db-log) LIVE_DB_LOG=1; BACKEND="hcxlabtool"; shift;;
             --rds) RDS_MODE="$2"; shift 2;;
             --backend)
                 BACKEND="$2"

@@ -9,10 +9,11 @@
 #==============================================================================
 
 # --- Script Version ---
-ANALYZER_VERSION="7.0.0 \"Hydra\""
+ANALYZER_VERSION="7.1.0 \"Hydra-Intel\""
 
 # --- System & Path Configuration ---
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then
+    # shellcheck disable=SC1091
     . "/etc/hcxtools/hcxscript.conf"
 fi
 
@@ -21,6 +22,7 @@ CAPTURE_DIR=${OUTPUT_DIR:-"/root/hcxdumps"}
 ANALYSIS_DIR="/root/hcx-analysis"
 DB_DIR="/root/hcxdumps"
 DB_FILE="$DB_DIR/database.db"
+LIVE_LOG_FILE="/tmp/hcx_live_survey.log"
 mkdir -p "$ANALYSIS_DIR"
 mkdir -p "$DB_DIR"
 
@@ -158,6 +160,152 @@ run_with_spinner() {
 }
 
 #==============================================================================
+# DATABASE & PARSING FUNCTIONS
+#==============================================================================
+
+initialize_database() {
+    local db_type="$1"
+    local db_target="$2"
+
+    printf "Initializing and migrating database schema...\n"
+
+    # This single block creates tables if they dont exist, ensuring the full, final schema.
+    local schema_sql="
+        CREATE TABLE IF NOT EXISTS networks (
+            bssid TEXT PRIMARY KEY, 
+            essid_b64 TEXT, 
+            vendor TEXT,
+            encryption_type TEXT,
+            channel INTEGER,
+            last_seen_rssi INTEGER,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen TIMESTAMP
+        ) WITHOUT ROWID;
+
+        CREATE TABLE IF NOT EXISTS clients (
+            mac TEXT PRIMARY KEY, 
+            vendor TEXT, 
+            associated_bssid TEXT,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen TIMESTAMP
+        ) WITHOUT ROWID;
+
+        CREATE TABLE IF NOT EXISTS hashes (
+            hash_content TEXT PRIMARY KEY, 
+            hash_type TEXT, 
+            bssid TEXT, 
+            client_mac TEXT, 
+            essid_b64 TEXT, 
+            is_apless INTEGER,
+            psk TEXT,
+            cracked_timestamp DATETIME
+        ) WITHOUT ROWID;
+
+        CREATE TABLE IF NOT EXISTS credentials (
+            id INTEGER PRIMARY KEY,
+            source_mac TEXT NOT NULL,
+            credential_type TEXT NOT NULL,
+            credential_value TEXT NOT NULL,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    "
+    # These ALTER statements handle migration from older schemas. Errors are suppressed.
+    local migrate_sql="
+        ALTER TABLE networks ADD COLUMN encryption_type TEXT;
+        ALTER TABLE networks ADD COLUMN channel INTEGER;
+        ALTER TABLE networks ADD COLUMN last_seen_rssi INTEGER;
+        ALTER TABLE networks ADD COLUMN first_seen TIMESTAMP;
+        ALTER TABLE networks ADD COLUMN last_seen TIMESTAMP;
+        ALTER TABLE clients ADD COLUMN first_seen TIMESTAMP;
+        ALTER TABLE clients ADD COLUMN last_seen TIMESTAMP;
+        ALTER TABLE hashes ADD COLUMN psk TEXT;
+        ALTER TABLE hashes ADD COLUMN cracked_timestamp DATETIME;
+    "
+    
+    if [ "$db_type" = "sqlite3" ]; then
+        echo "$schema_sql" | sqlite3 "$db_target"
+        echo "$migrate_sql" | sqlite3 "$db_target" 2>/dev/null
+    elif [ "$db_type" = "mysql" ]; then
+        echo "Notice: Automatic schema setup is for SQLite. Please ensure your MySQL schema is current."
+    fi
+}
+
+parse_and_update_from_live_log() {
+    local db_type="$1"
+    local db_target="$2"
+
+    if [ ! -f "$LIVE_LOG_FILE" ]; then
+        return 0
+    fi
+
+    printf "Parsing live survey data from RDS log...\n"
+    
+    local sql_batch_file="/tmp/live_update.sql"
+    # This awk script is tuned to parse the machine-readable output of hcxlabtool --rds=1
+    awk '/(WPA|OWE)/ {
+        bssid = $1;
+        rssi = $2;
+        channel = $4;
+        encryption = $7;
+        gsub(/\047/, "", encryption);
+
+        printf "INSERT OR IGNORE INTO networks (bssid, last_seen_rssi, channel, encryption_type, last_seen) VALUES (\047%s\047, %d, %d, \047%s\047, DATETIME(\047now\047));\n", bssid, rssi, channel, encryption;
+        printf "UPDATE networks SET last_seen_rssi = %d, channel = %d, encryption_type = \047%s\047, last_seen = DATETIME(\047now\047) WHERE bssid = \047%s\047;\n", rssi, channel, encryption, bssid;
+    }' "$LIVE_LOG_FILE" > "$sql_batch_file"
+
+    if [ -s "$sql_batch_file" ]; then
+        printf "Batch updating database with live network data...\n"
+        if [ "$db_type" = "sqlite3" ]; then
+            sqlite3 "$db_target" < "$sql_batch_file"
+        elif [ "$db_type" = "mysql" ]; then
+            mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$sql_batch_file"
+        fi
+    fi
+    
+    rm -f "$sql_batch_file" "$LIVE_LOG_FILE"
+}
+
+parse_and_update_db() {
+    local db_type="$1"; shift; local all_hashes_file="$1"
+    local sql_file="/tmp/db_update.sql"; >"$sql_file"
+    printf "Parsing hash data and generating SQL...\n"
+    
+    # Use xxd to convert hex to base64 for ESSIDs
+    while IFS= read -r line; do
+        local essid_hex; essid_hex=$(echo "$line" | cut -d'*' -f5)
+        local essid_b64; essid_b64=$(echo -n "$essid_hex" | xxd -r -p 2>/dev/null | base64)
+        local bssid; bssid=$(echo "$line" | cut -d'*' -f3 | tr '[:lower:]' '[:upper:]')
+        local client_mac; client_mac=$(echo "$line" | cut -d'*' -f4 | tr '[:lower:]' '[:upper:]')
+        local hash_type; hash_type=$(echo "$line" | cut -d'*' -f1)
+        local apless=0; [ "$hash_type" = "1" ] && apless=1
+        local safe_line; safe_line=$(echo "$line" | sed "s/'/''/g")
+
+        # Insert network if not exists
+        echo "INSERT OR IGNORE INTO networks (bssid, essid_b64) VALUES ('$bssid', '$essid_b64');" >> "$sql_file"
+        # Insert client if not exists
+        [ "$client_mac" != "000000000000" ] && echo "INSERT OR IGNORE INTO clients (mac, associated_bssid) VALUES ('$client_mac', '$bssid');" >> "$sql_file"
+        # Insert hash if not exists
+        echo "INSERT OR IGNORE INTO hashes (hash_content, hash_type, bssid, client_mac, essid_b64, is_apless) VALUES ('$safe_line', '$hash_type', '$bssid', '$client_mac', '$essid_b64', $apless);" >> "$sql_file"
+    done < "$all_hashes_file"
+    
+    # Update vendor info
+    hcxhashtool -i "$all_hashes_file" --info-vendor=stdout 2>/dev/null | while read -r line; do
+        local mac; mac=$(echo "$line" | awk '{print $1}' | tr '[:lower:]' '[:upper:]')
+        local vendor; vendor=$(echo "$line" | cut -d' ' -f2- | sed "s/'/''/g")
+        echo "UPDATE networks SET vendor = '$vendor' WHERE bssid = '$mac' AND vendor IS NULL;" >> "$sql_file"
+        echo "UPDATE clients SET vendor = '$vendor' WHERE mac = '$mac' AND vendor IS NULL;" >> "$sql_file"
+    done
+    
+    printf "Updating database with hash data...\n"
+    if [ "$db_type" = "sqlite3" ]; then
+        sqlite3 "$DB_FILE" < "$sql_file"
+    elif [ "$db_type" = "mysql" ]; then
+        mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$sql_file"
+    fi
+    rm -f "$sql_file"
+}
+
+#==============================================================================
 # ANALYSIS & UTILITY FUNCTIONS
 #==============================================================================
 
@@ -209,66 +357,113 @@ run_intel() {
 run_vuln() {
     shift
     local files_to_process="$@"
-    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$CAPTURE_DIR" -name "*.pcapng" 2>/dev/null); fi
     if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
     
     local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"
-    run_with_spinner "Extracting data..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE" -E "$ANALYSIS_DIR/all_essids.txt"
+    run_with_spinner "Extracting data..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
     if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No crackable hashes found.${NC}"; return; fi
+    
     printf "\n%b\n" "${BLUE}--- Comprehensive Default Password Check ---${NC}"
-    hcxpsktool -c "$ALL_HASHES_FILE" --netgear --spectrum --weakpass --digit10 --phome --tenda --ee --alticeoptimum --asus --eudate --usdate --wpskeys | tee "$ANALYSIS_DIR/cracked_by_defaults.txt"
-    printf "\n%b\n" "${BLUE}--- AP-Less (Client-Only) Attack Candidates ---${NC}"
-    hcxhashtool -i "$ALL_HASHES_FILE" --apless -o "$ANALYSIS_DIR/apless_targets.hc22000"
-    if [ -s "$ANALYSIS_DIR/apless_targets.hc22000" ]; then echo "AP-less targets saved to: $ANALYSIS_DIR/apless_targets.hc22000"; fi
-    printf "\n%b\n" "${BLUE}--- Legacy Protocol Scan ---${NC}"
-    hcxpcapngtool $files_to_process --eapmd5="$ANALYSIS_DIR/eap-md5.hash" --eapleap="$ANALYSIS_DIR/eap-leap.hash" --tacacs-plus="$ANALYSIS_DIR/tacacs-plus.hash" >/dev/null 2>&1
-    if [ -s "$ANALYSIS_DIR/eap-md5.hash" ]; then printf "%b\n" "${YELLOW}Vulnerable EAP-MD5 hashes found! Saved to eap-md5.hash${NC}"; fi
-    if [ -s "$ANALYSIS_DIR/eap-leap.hash" ]; then printf "%b\n" "${YELLOW}Vulnerable EAP-LEAP hashes found! Saved to eap-leap.hash${NC}"; fi
-    if [ -s "$ANALYSIS_DIR/tacacs-plus.hash" ]; then printf "%b\n" "${YELLOW}Vulnerable TACACS+ hashes found! Saved to tacacs-plus.hash${NC}"; fi
+    
+    local psk_update_sql="/tmp/psk_updates.sql"
+    > "$psk_update_sql"
+
+    hcxpsktool -c "$ALL_HASHES_FILE" --netgear --spectrum --weakpass --digit10 --phome --tenda --ee --alticeoptimum --asus --eudate --usdate --wpskeys \
+    | tee "$ANALYSIS_DIR/cracked_by_defaults.txt" \
+    | awk -F: '{
+        bssid = $1;
+        psk = $3;
+        gsub(/\047/, "\047\047", psk);
+        printf "UPDATE hashes SET psk = \047%s\047, cracked_timestamp = DATETIME(\047now\047) WHERE bssid = \047%s\047;\n", psk, bssid;
+    }' > "$psk_update_sql"
+
+    if [ -s "$psk_update_sql" ] && [ -f "$DB_FILE" ]; then
+        printf "Found cracked passwords! Updating database...\n"
+        sqlite3 "$DB_FILE" < "$psk_update_sql"
+        printf "%b\n" "${GREEN}Database updated with newly cracked PSKs.${NC}"
+    fi
+    rm -f "$psk_update_sql"
 }
 
 run_pii() {
     shift
     local files_to_process="$@"
-    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$CAPTURE_DIR" -name "*.pcapng" 2>/dev/null); fi
     if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
     
     printf "%b\n" "${CYAN}--- Scanning for Personally Identifiable Information ---${NC}"
     local ID_FILE="$ANALYSIS_DIR/identities.txt"; local USER_FILE="$ANALYSIS_DIR/usernames.txt"
     run_with_spinner "Extracting identities and usernames..." "hcxpcapngtool" $files_to_process -I "$ID_FILE" -U "$USER_FILE"
+    
     printf "\n%b\n" "${BLUE}--- PII Scan Results ---${NC}"
+    local credential_sql_file="/tmp/credential_updates.sql"
+    > "$credential_sql_file"
+    
     if [ -s "$ID_FILE" ]; then
         printf "%b\n" "[${YELLOW}FOUND${NC}] Identities discovered and saved to: ${GREEN}$ID_FILE${NC}"
-        if [ "$VERBOSE" -eq 1 ]; then echo "--- Contents ---"; cat "$ID_FILE"; fi
+        awk '{ printf "INSERT OR IGNORE INTO credentials (source_mac, credential_type, credential_value) VALUES (\047%s\047, \047identity\047, \047%s\047);\n", $1, $2 }' "$ID_FILE" >> "$credential_sql_file"
     else
-        printf "%b\n" "[${GREEN}OK${NC}] No WPA-Enterprise identities found."; rm -f "$ID_FILE"
+        printf "%b\n" "[${GREEN}OK${NC}] No WPA-Enterprise identities found."
     fi
+    
     if [ -s "$USER_FILE" ]; then
         printf "%b\n" "[${YELLOW}FOUND${NC}] Usernames discovered and saved to: ${GREEN}$USER_FILE${NC}"
-        if [ "$VERBOSE" -eq 1 ]; then echo "--- Contents ---"; cat "$USER_FILE"; fi
+        awk '{ printf "INSERT OR IGNORE INTO credentials (source_mac, credential_type, credential_value) VALUES (\047%s\047, \047username\047, \047%s\047);\n", $1, $2 }' "$USER_FILE" >> "$credential_sql_file"
     else
-        printf "%b\n" "[${GREEN}OK${NC}] No WPA-Enterprise usernames found."; rm -f "$USER_FILE"
+        printf "%b\n" "[${GREEN}OK${NC}] No WPA-Enterprise usernames found."
     fi
+
+    if [ -s "$credential_sql_file" ] && [ -f "$DB_FILE" ]; then
+        printf "Found credentials! Updating database...\n"
+        sqlite3 "$DB_FILE" < "$credential_sql_file"
+        printf "%b\n" "${GREEN}Database updated with PII.${NC}"
+    fi
+    rm -f "$credential_sql_file"
 }
 
 run_db() {
     shift
+    if ! command -v xxd >/dev/null 2>&1; then
+        printf "${RED}Error: 'xxd' is required for database operations but is not installed.${NC}\n"
+        if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+            printf "Attempt to install it now via opkg? [y/N] "
+            read -r response
+            if [ "$response" = "y" ] || [ "$response" = "Y" ]; then
+                opkg update && opkg install xxd
+                if ! command -v xxd >/dev/null 2>&1; then
+                    printf "${RED}Installation failed. Please install 'xxd' manually.${NC}\n"
+                    return 1
+                fi
+                printf "${GREEN}'xxd' installed successfully.${NC}\n"
+            else
+                return 1
+            fi
+        fi
+    fi
+
     local files_to_process="$@"
-    if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
-    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$CAPTURE_DIR" -name "*.pcapng" 2>/dev/null); fi
     
-    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes_for_db.hc22000"
     printf "%b\n" "${CYAN}--- Running Database Update (SQLite) ---${NC}"
     if ! command -v sqlite3 >/dev/null 2>&1; then printf "%b\n" "${RED}Error: sqlite3 not found!${NC}"; return 1; fi
     printf "Database located at: %b\n" "${GREEN}${DB_FILE}${NC}"
-    run_with_spinner "Initializing schema..." "sqlite3" "\"$DB_FILE\"" <<'EOF'
-    CREATE TABLE IF NOT EXISTS networks (bssid TEXT PRIMARY KEY, essid_b64 TEXT, vendor TEXT) WITHOUT ROWID;
-    CREATE TABLE IF NOT EXISTS clients (mac TEXT PRIMARY KEY, vendor TEXT, associated_bssid TEXT) WITHOUT ROWID;
-    CREATE TABLE IF NOT EXISTS hashes (hash_content TEXT PRIMARY KEY, hash_type TEXT, bssid TEXT, client_mac TEXT, essid_b64 TEXT, is_apless INTEGER) WITHOUT ROWID;
-EOF
-    run_with_spinner "Extracting data..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
-    if [ ! -s "$ALL_HASHES_FILE" ]; then printf "%b\n" "${YELLOW}No new data found.${NC}"; return; fi
-    parse_and_update_db "sqlite3" "$ALL_HASHES_FILE"; rm -f "$ALL_HASHES_FILE"
+
+    initialize_database "sqlite3" "$DB_FILE"
+    parse_and_update_from_live_log "sqlite3" "$DB_FILE"
+    
+    if [ -n "$files_to_process" ]; then
+        local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes_for_db.hc22000"
+        run_with_spinner "Extracting hash data..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE"
+        if [ -s "$ALL_HASHES_FILE" ]; then
+            parse_and_update_db "sqlite3" "$ALL_HASHES_FILE"
+            rm -f "$ALL_HASHES_FILE"
+        else
+            printf "${YELLOW}No new hash data found in pcap files.${NC}\n"
+        fi
+    else
+        printf "${YELLOW}No pcap files specified or found to process for hash data.${NC}\n"
+    fi
     printf "\n%b\n" "${GREEN}--- SQLite Update Complete ---${NC}"
 }
 
@@ -400,36 +595,6 @@ run_mysql() {
     printf "\n%b\n" "${GREEN}--- MySQL Update Complete ---${NC}"
 }
 
-parse_and_update_db() {
-    local db_type="$1"; shift; local all_hashes_file="$1"
-    local sql_file="/tmp/db_update.sql"; >"$sql_file"
-    printf "Parsing data and generating SQL..."
-    while IFS= read -r line; do
-        local hash_type=$(echo "$line" | cut -d'*' -f1); local bssid=$(echo "$line" | cut -d'*' -f3 | tr '[:lower:]' '[:upper:]'); local client_mac=$(echo "$line" | cut -d'*' -f4 | tr '[:lower:]' '[:upper:]'); local essid_hex=$(echo "$line" | cut -d'*' -f5)
-        local essid_b64=$(echo "$essid_hex" | xxd -r -p | base64); local apless=0; [ "$hash_type" = "1" ] && apless=1; local safe_line=$(echo "$line" | sed "s/'/''/g")
-        if [ "$db_type" = "sqlite3" ]; then
-            echo "INSERT OR IGNORE INTO networks (bssid, essid_b64) VALUES ('$bssid', '$essid_b64');" >> "$sql_file"
-            [ "$client_mac" != "000000000000" ] && echo "INSERT OR IGNORE INTO clients (mac, associated_bssid) VALUES ('$client_mac', '$bssid');" >> "$sql_file"
-            echo "INSERT OR IGNORE INTO hashes (hash_content, hash_type, bssid, client_mac, essid_b64, is_apless) VALUES ('$safe_line', '$hash_type', '$bssid', '$client_mac', '$essid_b64', $apless);" >> "$sql_file"
-        elif [ "$db_type" = "mysql" ]; then
-            echo "INSERT IGNORE INTO networks (bssid, essid_b64) VALUES ('$bssid', '$essid_b64');" >> "$sql_file"
-            [ "$client_mac" != "000000000000" ] && echo "INSERT IGNORE INTO clients (mac, associated_bssid) VALUES ('$client_mac', '$bssid');" >> "$sql_file"
-            echo "INSERT IGNORE INTO hashes (hash_content, hash_type, bssid, client_mac, essid_b64, is_apless) VALUES ('$safe_line', '$hash_type', '$bssid', '$client_mac', '$essid_b64', $apless);" >> "$sql_file"
-        fi
-    done < "$all_hashes_file"
-    hcxhashtool -i "$all_hashes_file" --info-vendor=stdout | while read -r line; do
-        local mac=$(echo "$line" | awk '{print $1}' | tr '[:lower:]' '[:upper:]'); local vendor=$(echo "$line" | cut -d' ' -f2- | sed "s/'/''/g")
-        if [ "$db_type" = "sqlite3" ]; then
-            echo "UPDATE networks SET vendor = '$vendor' WHERE bssid = '$mac' AND vendor IS NULL;" >> "$sql_file"; echo "UPDATE clients SET vendor = '$vendor' WHERE mac = '$mac' AND vendor IS NULL;" >> "$sql_file"
-        elif [ "$db_type" = "mysql" ]; then
-            echo "UPDATE networks SET vendor = '$vendor' WHERE bssid = '$mac' AND vendor IS NULL;" >> "$sql_file"; echo "UPDATE clients SET vendor = '$vendor' WHERE mac = '$mac' AND vendor IS NULL;" >> "$sql_file"
-        fi
-    done
-    printf "${GREEN}Done.${NC}\n"; printf "Updating database from SQL file..."
-    if [ "$db_type" = "sqlite3" ]; then sqlite3 "$DB_FILE" < "$sql_file"; elif [ "$db_type" = "mysql" ]; then mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$sql_file"; fi
-    printf "${GREEN}Done.${NC}\n"; rm -f "$sql_file"
-}
-
 run_remote_execution() {
     local action_type="$1"; local action_name="$2"; shift 2
     printf "%b\n" "${CYAN}--- Initiating Remote Execution: ${action_type} -> ${action_name} ---${NC}"
@@ -437,7 +602,24 @@ run_remote_execution() {
     if [ "$#" -eq 0 ]; then
         printf "%b\n" "${YELLOW}No files specified for remote execution.${NC}"; return 1
     fi
-    printf "Files to be uploaded:\n"; printf '  %s\n' "$@"
+
+    printf "Files to be uploaded:\n"
+    # Loop through each file to get its size and format the output
+    for file in "$@"; do
+        # Get file size in kilobytes in a POSIX-compliant way
+        size_kb=$(du -k "$file" | cut -f1)
+
+        # Check if size is greater than 1MB (1024 KB)
+        if [ "$size_kb" -gt 1024 ]; then
+            # Use awk for floating-point math to calculate MB
+            size_formatted=$(awk -v kb="$size_kb" 'BEGIN { printf "%.1f MB", kb / 1024 }')
+        else
+            size_formatted="${size_kb} KB"
+        fi
+
+        # Print the file path and the formatted size in neat columns
+        printf "  %-70s %s\n" "$file" "$size_formatted"
+    done
     
     printf "\n%b\n" "${BLUE}--- Preparing Remote Environment ---${NC}"
     run_with_spinner "Preparing remote directory..." "ssh" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "mkdir -p '${REMOTE_SERVER_TMP_PATH}'" || return 1
@@ -446,15 +628,24 @@ run_remote_execution() {
     
     local remote_script_path="$REMOTE_SERVER_TMP_PATH/remote_job.sh"; local local_db_path=""
     if [ "$action_name" = "db" ]; then
-        run_with_spinner "Uploading local SQLite DB..." "scp" -q "$DB_FILE" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${REMOTE_SERVER_TMP_PATH}/database.db"
+        # NEW: Create a blank DB file if it doesn't exist locally first.
+        if [ ! -f "$DB_FILE" ]; then
+            printf "\nLocal database not found. Creating a new one for the remote session..."
+            touch "$DB_FILE"
+            printf "${GREEN}Done.${NC}\n"
+        fi
+        run_with_spinner "Uploading local SQLite DB..." "scp" -q "$DB_FILE" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${REMOTE_SERVER_TMP_PATH}/database.db" || return 1
         local_db_path="$REMOTE_SERVER_TMP_PATH/database.db"
     fi
     
-    local function_definitions=""; local required_funcs="sanitize_arg run_with_spinner run_summary run_intel run_vuln run_pii run_db run_mysql parse_and_update_db run_filter_hashes run_generate_wordlist run_merge_hashes run_export run_geotrack run_health_check version_ge run_interactive_mode";
-    for func in $required_funcs; do
-        func_def=$(sed -n "/^${func}() {/,/^\}/p" "$0"); function_definitions="$function_definitions
+        local function_definitions=""
+        local required_funcs="sanitize_arg run_with_spinner run_summary run_intel run_vuln run_pii run_db run_mysql parse_and_update_db run_filter_hashes run_generate_wordlist run_merge_hashes run_export run_geotrack run_health_check version_ge run_interactive_mode initialize_database parse_and_update_from_live_log"
+        for func in $required_funcs; do
+            # This is the corrected line that allows for spaces/tabs before a function name
+            func_def=$(sed -n "/^[[:space:]]*${func}() {/,/^\}/p" "$0")
+            function_definitions="$function_definitions
 $func_def"
-    done
+        done
     
     REMOTE_SCRIPT=$(cat <<EOF
 #!/bin/sh
