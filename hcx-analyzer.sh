@@ -108,6 +108,8 @@ show_usage() {
     printf "                           ${YELLOW}%-15s${NC} %s\n" "intel" "Run a deep-dive analysis on the remote server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "vuln" "Hunt for vulnerabilities on the remote server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "pii" "Run PII scan on the remote server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "recommend" "Run the strategic recommendation engine remotely."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "trends" "Run the historical trend analysis remotely."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "db" "Analyze remotely, then update the LOCAL SQLite DB."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "mysql" "Analyze remotely and update a remote MySQL DB."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "interactive" "Run the interactive menu on the remote server."
@@ -127,6 +129,7 @@ show_usage() {
     printf "\n"
     printf "%b\n" "${CYAN}--- UTILITY MODES (REMOTE) ---${NC}"
     printf "  ${GREEN}--remote-utility <name>${NC} Offload a utility task. Options:\n"
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "find-reuse-targets" "Run password reuse analysis on the remote server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "filter_hashes" "Filter hashes on the remote server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "generate_wordlist" "Generate wordlist on the remote server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "merge_hashes" "Merge hash files on the remote server."
@@ -938,7 +941,7 @@ run_remote_execution() {
     run_with_spinner "Uploading files..." "scp" -q -r -- "$@" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${REMOTE_SERVER_TMP_PATH}/" || return 1
     
     local remote_script_path="$REMOTE_SERVER_TMP_PATH/remote_job.sh"; local local_db_path=""
-    if [ "$action_name" = "db" ]; then
+    if [ "$action_name" = "db" ] || [ "$action_name" = "trends" ] || [ "$action_name" = "find-reuse-targets" ]; then
         # NEW: Create a blank DB file if it doesn't exist locally first.
         if [ ! -f "$DB_FILE" ]; then
             printf "\nLocal database not found. Creating a new one for the remote session..."
@@ -950,8 +953,7 @@ run_remote_execution() {
     fi
     
         local function_definitions=""
-        local required_funcs="sanitize_arg run_with_spinner run_summary run_intel run_vuln run_pii run_db run_mysql parse_and_update_db run_filter_hashes run_generate_wordlist run_merge_hashes run_export run_geotrack run_health_check version_ge run_interactive_mode initialize_database parse_and_update_from_live_log"
-        for func in $required_funcs; do
+        local required_funcs="sanitize_arg run_with_spinner run_summary run_intel run_vuln run_pii run_db run_mysql parse_and_update_db run_filter_hashes run_generate_wordlist run_merge_hashes run_export run_geotrack run_health_check version_ge run_interactive_mode initialize_database parse_and_update_from_live_log run_recommend run_trends run_find_reuse_targets"        for func in $required_funcs; do
             # This is the corrected line that allows for spaces/tabs before a function name
             func_def=$(sed -n "/^[[:space:]]*${func}() {/,/^\}/p" "$0")
             function_definitions="$function_definitions
@@ -1011,7 +1013,7 @@ EOF
                 printf "%b\n" "${CYAN}Listing remote directory for debugging:${NC}"
                 ssh -T "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "ls -la '${REMOTE_SERVER_TMP_PATH}'"
             fi
-        elif [ "$action_name" = "db" ]; then
+        elif [ "$action_name" = "db" ] || [ "$action_name" = "trends" ] || [ "$action_name" = "find-reuse-targets" ]; then
             run_with_spinner "Downloading updated SQLite DB..." "scp" -q "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${local_db_path}" "$DB_FILE"
         fi
     else
