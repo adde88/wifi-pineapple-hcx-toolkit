@@ -953,7 +953,8 @@ run_remote_execution() {
     fi
     
         local function_definitions=""
-        local required_funcs="sanitize_arg run_with_spinner run_summary run_intel run_vuln run_pii run_db run_mysql parse_and_update_db run_filter_hashes run_generate_wordlist run_merge_hashes run_export run_geotrack run_health_check version_ge run_interactive_mode initialize_database parse_and_update_from_live_log run_recommend run_trends run_find_reuse_targets"        for func in $required_funcs; do
+        local required_funcs="sanitize_arg run_with_spinner run_summary run_intel run_vuln run_pii run_db run_mysql parse_and_update_db run_filter_hashes run_generate_wordlist run_merge_hashes run_export run_geotrack run_health_check version_ge run_interactive_mode initialize_database parse_and_update_from_live_log run_recommend run_trends run_find_reuse_targets"
+        for func in $required_funcs; do
             # This is the corrected line that allows for spaces/tabs before a function name
             func_def=$(sed -n "/^[[:space:]]*${func}() {/,/^\}/p" "$0")
             function_definitions="$function_definitions
