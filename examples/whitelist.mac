@@ -1,6 +1,6 @@
 # Example MAC Whitelist for hcxdumptool-launcher
 # Target APs for authorized security testing
-# Format: XX:XX:XX:XX:XX:XX (one per line)
+# Format: XX:XX:XX (one per line)
 # Case-insensitive, comments supported
 
 # === Corporate Test Network ===

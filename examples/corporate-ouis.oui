@@ -1,0 +1,252 @@
+# Extended Corporate/Enterprise Access Point OUIs
+# Comprehensive list of enterprise-grade AP manufacturers
+# Useful for targeting corporate networks during authorized assessments
+# Format: First 3 octets (OUI) followed by XX:XX:XX
+#
+# Usage: Complete with actual MAC addresses and use with:
+# hcxdumptool-launcher -f corporate-ouis.txt -m whitelist
+
+# === Cisco Systems (Multiple Product Lines) ===
+# Cisco Aironet Series
+00:0B:85
+00:0C:41
+00:0D:BD
+00:0E:D7
+00:0F:F7
+00:12:D9
+00:13:1A
+00:14:69
+00:15:2B
+00:16:46
+00:17:94
+00:18:73
+00:19:55
+00:1A:2F
+00:1A:6C
+00:1A:A1
+00:1B:D4
+00:1C:F9
+00:1D:45
+00:1E:14
+00:1E:F7
+00:1F:9D
+00:21:55
+00:22:BD
+00:23:04
+00:23:5D
+00:24:97
+00:25:45
+00:26:0A
+40:55:39
+58:0A:20
+64:00:F1
+68:7F:74
+70:10:5C
+88:5A:92
+E8:B0:C8
+F4:1F:C2
+
+# Cisco Meraki
+00:0C:E7
+00:18:0A
+88:15:44
+AC:17:C8
+E0:CB:BC
+E0:55:3D
+FC:99:47
+
+# === Aruba Networks (HPE) ===
+00:0B:86
+00:1A:1E
+00:24:6C
+18:64:72
+20:4C:03
+24:DE:C6
+40:E3:D6
+6C:F3:7F
+70:3A:0E
+84:D4:7E
+94:B4:0F
+9C:1C:12
+A8:BD:27
+AC:A3:1E
+B4:5D:50
+D8:C7:C8
+F0:5C:19
+
+# === Ruckus Wireless (CommScope) ===
+00:0C:E6
+00:1D:2E
+00:1F:7E
+00:24:82
+00:25:C4
+24:79:F3
+2C:C5:D3
+54:3D:37
+58:93:96
+5C:E2:8C
+8C:0C:90
+94:F6:65
+C4:01:7C
+EC:8C:A2
+F0:B0:52
+
+# === Extreme Networks (formerly Aerohive) ===
+00:19:77
+08:EA:40
+40:5B:D8
+5C:0E:8B
+74:67:F7
+80:A9:97
+BC:9F:E4
+E0:1C:41
+
+# === Juniper Networks (Mist) ===
+00:1B:C5
+2C:21:31
+44:61:32
+5C:5E:AB
+78:19:F7
+AC:4A:67
+F4:CC:55
+
+# === Fortinet FortiAP ===
+00:09:0F
+00:15:A8
+00:1F:A8
+08:5B:0E
+24:84:03
+40:B5:64
+70:4C:A5
+90:6C:AC
+D4:76:A0
+FC:AD:0F
+
+# === Motorola Solutions (Zebra) ===
+00:0A:0F
+00:0C:E5
+00:15:70
+00:1C:C1
+00:23:68
+00:25:F1
+40:4D:8E
+74:B6:2E
+AC:DE:48
+
+# === Allied Telesis ===
+00:00:CD
+00:10:7A
+00:12:5F
+00:13:D8
+00:30:84
+00:60:D0
+
+# === Cambium Networks ===
+00:04:56
+04:C5:A4
+2C:B2:5D
+58:C1:7A
+7C:8B:CA
+DC:9F:A4
+
+# === Meru Networks (Fortinet) ===
+00:0C:E6
+00:18:64
+00:1F:7C
+00:22:A1
+00:24:C4
+
+# === Peplink/Pepwave ===
+00:1A:EE
+1C:9E:46
+38:E3:C5
+5C:E9:1E
+78:6E:E7
+
+# === Xirrus ===
+00:16:B9
+00:1F:7C
+00:22:A1
+00:24:C4
+
+# === Alcatel-Lucent Enterprise ===
+00:08:5D
+00:80:9F
+00:C0:8B
+00:D0:95
+00:E0:B1
+00:E0:DA
+
+# === Brocade (Ruckus) ===
+00:05:33
+00:0D:B4
+00:10:18
+00:1B:ED
+00:24:38
+00:27:F8
+74:8E:F8
+
+# === Proxim Wireless ===
+00:20:A6
+00:60:B3
+00:90:C5
+
+# === Riverbed (Xirrus) ===
+00:16:B9
+00:1F:7C
+00:24:C4
+5C:E3:0E
+
+# === SonicWall SonicPoint ===
+00:06:B1
+00:17:C5
+00:1D:EB
+00:CB:51
+C0:EA:E4
+D0:00:0D
+
+# === Trapeze Networks (Juniper) ===
+00:0B:0E
+00:0C:E6
+00:14:D8
+00:1B:2F
+00:21:D8
+00:24:82
+
+# === Mojo Networks (Arista) ===
+00:0C:E6
+00:15:6D
+00:1B:8F
+00:24:A4
+5C:A4:8A
+
+# === Lancom Systems ===
+00:A0:57
+00:1C:4D
+C0:A0:BB
+
+# === Enterasys Networks (Extreme) ===
+00:00:1D
+00:01:F4
+00:0C:2A
+00:11:88
+00:1B:25
+00:1F:45
+20:B3:99
+D4:95:08
+
+# === Notes ===
+# 1. This list includes major enterprise WiFi vendors
+# 2. Some companies have been acquired/merged (noted in parentheses)
+# 3. OUIs can be recycled or reassigned
+# 4. Always verify current OUI assignments
+# 5. Some vendors use multiple OUI ranges
+# 6. Check IEEE OUI database for updates: http://standards-oui.ieee.org/
+# 7. Complete XX:XX:XX with actual device addresses
+
+# === Usage Tips ===
+# - For corporate penetration tests, create a custom list from reconnaissance
+# - Combine with ESSID filtering for better accuracy
+# - Some enterprises use consumer-grade APs (check other lists)
+# - Consider time-based filtering (business hours)
+# - Cross-reference with signal strength for proximity

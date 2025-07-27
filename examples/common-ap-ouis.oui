@@ -1,0 +1,111 @@
+# Common Access Point Manufacturer OUIs
+# Useful for targeting specific vendors during assessments
+# Format: First 3 octets (OUI) identify manufacturer
+# Note: You must complete with last 3 octets for actual use
+#
+# Updated: 2024
+
+# Cisco Systems
+00:1A:A1
+00:1B:D4
+00:1E:F7
+00:23:04
+58:0A:20
+E8:B0:C8
+
+# Cisco Meraki
+00:0C:E7
+00:18:0A
+E0:CB:BC
+AC:17:C8
+
+# Ubiquiti Networks
+24:A4:3C
+80:2A:A8
+B4:FB:E4
+F0:9F:C2
+24:5A:4C
+
+# Aruba Networks (HPE)
+00:0B:86
+00:1A:1E
+94:B4:0F
+20:4C:03
+D8:C7:C8
+
+# Ruckus Wireless (CommScope)
+00:1F:7E
+24:79:F3
+58:93:96
+8C:0C:90
+
+# Netgear
+A0:40:A0
+20:E5:2A
+9C:D3:6D
+C0:3F:0E
+
+# TP-Link
+50:C7:BF
+F0:9F:C2
+B0:95:8E
+98:DA:C4
+
+# D-Link
+00:05:5D
+00:1B:11
+00:1E:58
+84:C9:B2
+
+# Asus
+00:1D:60
+00:1F:C6
+10:C3:7B
+2C:FD:A1
+
+# Linksys (Belkin)
+00:1A:70
+00:1E:E5
+58:6D:8F
+14:91:82
+
+# MikroTik
+00:0C:42
+4C:5E:0C
+6C:3B:6B
+B8:69:F4
+
+# Fortinet
+00:09:0F
+00:1F:A8
+08:5B:0E
+90:6C:AC
+
+# SonicWall
+00:06:B1
+00:17:C5
+C0:EA:E4
+
+# Sophos
+00:1A:8C
+A8:C8:3A
+
+# Extreme Networks (Aerohive)
+00:19:77
+08:EA:40
+E0:1C:41
+
+# Huawei
+00:1E:10
+00:E0:FC
+48:46:FB
+80:FB:06
+
+# Xiaomi
+00:EC:0A
+38:6B:BB
+50:EC:50
+
+# Example usage:
+# Replace XX:XX:XX with actual values from target network
+# Use with: hcxdumptool-launcher -f common-ap-ouis.txt -m whitelist

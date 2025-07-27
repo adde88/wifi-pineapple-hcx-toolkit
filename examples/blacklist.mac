@@ -1,7 +1,7 @@
 # Example MAC Blacklist for hcxdumptool-launcher
 # MACs to exclude from capture
 # Useful for avoiding specific networks during testing
-# Format: XX:XX:XX:XX:XX:XX (one per line)
+# Format: XX:XX:XX (one per line)
 
 # === Neighbor Networks (DO NOT TEST) ===
 # Residential networks near test site

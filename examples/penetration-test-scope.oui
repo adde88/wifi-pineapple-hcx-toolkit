@@ -9,34 +9,34 @@
 
 # === AUTHORIZED ACCESS POINTS ===
 # Building A - Corporate Network
-# XX:XX:XX:XX:XX:XX  # CORP-WIFI-01 (Main Office)
-# XX:XX:XX:XX:XX:XX  # CORP-WIFI-02 (Main Office)
-# XX:XX:XX:XX:XX:XX  # CORP-WIFI-03 (Conference Room)
+# XX:XX:XX  # CORP-WIFI-01 (Main Office)
+# XX:XX:XX  # CORP-WIFI-02 (Main Office)
+# XX:XX:XX  # CORP-WIFI-03 (Conference Room)
 
 # Building A - Guest Network  
-# XX:XX:XX:XX:XX:XX  # GUEST-WIFI-01
-# XX:XX:XX:XX:XX:XX  # GUEST-WIFI-02
+# XX:XX:XX  # GUEST-WIFI-01
+# XX:XX:XX  # GUEST-WIFI-02
 
 # Building B - Branch Office
-# XX:XX:XX:XX:XX:XX  # BRANCH-WIFI-01
-# XX:XX:XX:XX:XX:XX  # BRANCH-WIFI-02
+# XX:XX:XX  # BRANCH-WIFI-01
+# XX:XX:XX  # BRANCH-WIFI-02
 
 # Warehouse - Industrial Network
-# XX:XX:XX:XX:XX:XX  # WAREHOUSE-AP-01
-# XX:XX:XX:XX:XX:XX  # WAREHOUSE-AP-02
-# XX:XX:XX:XX:XX:XX  # WAREHOUSE-IOT-01
+# XX:XX:XX  # WAREHOUSE-AP-01
+# XX:XX:XX  # WAREHOUSE-AP-02
+# XX:XX:XX  # WAREHOUSE-IOT-01
 
 # === AUTHORIZED TEST DEVICES ===
 # Client-provided test accounts
-# XX:XX:XX:XX:XX:XX  # Test-Employee-Phone
-# XX:XX:XX:XX:XX:XX  # Test-Employee-Laptop
-# XX:XX:XX:XX:XX:XX  # Test-Guest-Device
+# XX:XX:XX  # Test-Employee-Phone
+# XX:XX:XX  # Test-Employee-Laptop
+# XX:XX:XX  # Test-Guest-Device
 
 # === OUT OF SCOPE - DO NOT TEST ===
 # These are explicitly excluded from testing
-# XX:XX:XX:XX:XX:XX  # EXEC-WIFI (Executive floor)
-# XX:XX:XX:XX:XX:XX  # SECURITY-AP (Security office)
-# XX:XX:XX:XX:XX:XX  # MEDICAL-WIFI (If healthcare)
+# XX:XX:XX  # EXEC-WIFI (Executive floor)
+# XX:XX:XX  # SECURITY-AP (Security office)
+# XX:XX:XX  # MEDICAL-WIFI (If healthcare)
 
 # === NOTES ===
 # Testing window: [START DATE/TIME] to [END DATE/TIME]

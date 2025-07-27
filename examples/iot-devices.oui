@@ -1,0 +1,90 @@
+# Common IoT Device MACs to Exclude
+# These devices often crash or behave poorly when attacked
+# Use as blacklist to avoid disrupting smart home devices
+#
+# Usage: hcxdumptool-launcher -f iot-devices.txt -m blacklist
+
+# === AMAZON DEVICES ===
+# Echo/Alexa devices (Amazon OUI prefixes)
+# 00:71:C2  # Echo Dot
+# 34:D2:70  # Echo Show
+# 44:00:49  # Fire TV
+# A4:5E:60  # Ring devices
+# 00:FC:8B  # Amazon Basics
+
+# === GOOGLE DEVICES ===
+# Google Home/Nest (Google OUI prefixes)
+# 30:FD:38  # Google Home Mini
+# 48:D6:D5  # Google Nest Hub
+# 1C:F2:9A  # Chromecast
+# 00:E0:4C  # Nest Thermostat
+# 64:16:66  # Nest Cameras
+
+# === SMART TVs ===
+# Various manufacturers
+# 00:6B:9E  # LG Smart TV
+# 00:12:FB  # Samsung Smart TV
+# 5C:41:5A  # Sony Smart TV
+# B0:EE:45  # Vizio Smart TV
+# 40:CD:7A  # Roku devices
+
+# === IP CAMERAS ===
+# Security cameras (various brands)
+# 00:12:12  # Hikvision
+# 3C:EF:8C  # Dahua
+# 00:80:F0  # Panasonic
+# 78:A5:DD  # Wyze Cam
+# 2C:AA:8E  # Wyze devices
+
+# === SMART HOME HUBS ===
+# 24:FD:52  # SmartThings Hub
+# 00:17:88  # Philips Hue Bridge
+# 00:04:4B  # NVIDIA Shield
+# CC:B2:55  # Apple TV
+# D0:03:4B  # Apple HomePod
+
+# === SMART PLUGS/SWITCHES ===
+# 50:C7:BF  # TP-Link Kasa
+# D8:F1:5B  # TP-Link devices
+# 68:FF:7B  # TP-Link
+# 50:02:91  # Belkin WeMo
+# 94:10:3E  # Belkin devices
+
+# === SMART APPLIANCES ===
+# B0:4E:26  # TP-Link
+# 00:24:E4  # Withings/Nokia Health
+# AC:BC:32  # Xiaomi devices
+# 78:11:DC  # Xiaomi Mi products
+# 54:48:E6  # Beijing Xiaomi
+
+# === SONOS SPEAKERS ===
+# 00:0E:58  # Sonos devices
+# 48:A6:B8  # Sonos
+# 94:9F:3E  # Sonos
+
+# === SMART THERMOSTATS ===
+# 00:1D:C9  # Honeywell
+# 00:D0:2D  # Carrier/Bryant
+# 44:61:32  # Ecobee
+
+# === GAMING CONSOLES ===
+# These often have poor WiFi implementations
+# 00:15:C1  # Sony PlayStation
+# 00:50:F2  # Microsoft Xbox
+# 00:1B:EA  # Nintendo devices
+# 00:23:F8  # Nintendo Switch
+
+# === PRINTERS ===
+# Network printers may crash
+# 00:1B:A9  # Brother
+# 00:00:48  # Epson
+# 00:01:E6  # Hewlett-Packard
+# 00:21:5A  # HP Inc.
+# 00:18:FE  # Canon
+
+# === NOTES ===
+# - These are partial MACs (OUI prefixes)
+# - Complete with actual device MACs in your environment
+# - Many IoT devices have weak WiFi stacks
+# - Deauth attacks may cause permanent disconnection
+# - Some devices may require factory reset if attacked
