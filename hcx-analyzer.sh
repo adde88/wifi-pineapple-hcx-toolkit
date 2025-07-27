@@ -27,6 +27,14 @@ mkdir -p "$ANALYSIS_DIR"
 mkdir -p "$DB_DIR"
 
 # --- UNIFIED REMOTE SERVER CONFIGURATION ---
+# --- Cloud Sync Defaults ---
+CLOUD_SYNC_ENABLED=${CLOUD_SYNC_ENABLED:-0}
+RCLONE_REMOTE_NAME=${RCLONE_REMOTE_NAME:-""}
+RCLONE_REMOTE_PATH=${RCLONE_REMOTE_PATH:-"HCX-Captures"}
+# --- Push Notification Defaults ---
+NOTIFICATION_ENABLED=${NOTIFICATION_ENABLED:-0}
+NOTIFICATION_SERVICE=${NOTIFICATION_SERVICE:-"ntfy"}
+NOTIFICATION_URL=${NOTIFICATION_URL:-""}
 REMOTE_SERVER_ENABLED=${REMOTE_ANALYSIS_ENABLED:-1}
 REMOTE_SERVER_HOST=${REMOTE_HOST:-"192.168.1.20"}
 REMOTE_SERVER_USER=${REMOTE_USER:-"root"}
@@ -55,8 +63,10 @@ DB_NAME=${DB_NAME:-"hcx_toolkit"}
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BLUE='\033[0;34m'; RED='\033[0;31m'; NC='\033[0m'
 
 # --- Script State Variables ---
+SESSION_TAG=""
 MODE=""
 UTILITY_ACTION=""
+MONITOR_CRACK=0
 REMOTE_ACTION=0
 VERBOSE=0
 SUMMARY_MODE="deep"
@@ -87,6 +97,8 @@ show_usage() {
     printf "                           ${YELLOW}%-15s${NC} %s\n" "intel" "Deep-dive into device vendors and relationships."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "vuln" "Hunt for known default passwords and weak points."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "pii" "Scan for Personally Identifiable Information (usernames/identities)."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "recommend" "Analyze data and suggest strategic next steps."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "trends" "Analyze network changes and activity over time from the database."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "db" "Log all findings to a local SQLite database file."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "interactive" "Launch the guided menu for local operations."
     printf "\n"
@@ -102,12 +114,15 @@ show_usage() {
     printf "\n"
     printf "%b\n" "${CYAN}--- UTILITY MODES (LOCAL) ---${NC}"
     printf "  ${GREEN}--utility <name>${NC}        Run a local utility task. Options:\n"
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "setup-remote" "Interactive wizard to configure a remote analysis server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "find-reuse-targets" "Report on potential Wi-Fi password reuse."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "filter_hashes" "Create a new hash file based on specific criteria."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "generate_wordlist" "Build a custom wordlist from captured network names."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "generate-dashboard" "Create a professional HTML report of all findings."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "merge_hashes" "Combine multiple .hc22000 files into one."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "export" "Convert data to other formats like .csv or .cap."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "geotrack" "Create a KML map file from GPS data."
-    printf "                           ${YELLOW}%-15s${NC} %s\n" "remote_crack" "Offload cracking session to a remote Hashcat server."
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "remote_crack" "Offload cracking to a remote Hashcat server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "health_check" "Verify hcxtools versions and dependencies."
     printf "\n"
     printf "%b\n" "${CYAN}--- UTILITY MODES (REMOTE) ---${NC}"
@@ -117,6 +132,10 @@ show_usage() {
     printf "                           ${YELLOW}%-15s${NC} %s\n" "merge_hashes" "Merge hash files on the remote server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "export" "Export to CSV/CAP on the remote server."
     printf "                           ${YELLOW}%-15s${NC} %s\n" "geotrack" "Generate KML file on the remote server."
+    printf "\n"
+    printf "%b\n" "${CYAN}--- DATA MANAGEMENT & OFFLOADING ---${NC}"
+    printf "  ${GREEN}--utility <name>${NC}        Manage and synchronize data. Options:\n"
+    printf "                           ${YELLOW}%-15s${NC} %s\n" "cloud-sync" "Sync captures and results with a configured cloud provider."
     printf "\n"
     printf "%b\n" "${CYAN}--- ADVANCED FILTERING OPTIONS (for filter_hashes mode) ---${NC}"
     printf "  ${GREEN}--essid-min <len>${NC}       Filter hashes with ESSID length >= len.\n"
@@ -128,11 +147,13 @@ show_usage() {
     printf "\n"
     printf "%b\n" "${CYAN}--- OTHER OPTIONS ---${NC}"
     printf "  ${GREEN}--remote-host <host>${NC}    Specify remote server IP or hostname.\n"
+    printf "  ${GREEN}--tag <name>${NC}            Filter analysis to only include captures with this session tag.\n"
     printf "  ${GREEN}--summary-mode <type>${NC}   For summary mode: quick|deep (Default: deep).\n"
     printf "  ${GREEN}--mac-list <file>${NC}       Whitelist MACs for hash filtering.\n"
     printf "  ${GREEN}--mac-skiplist <file>${NC}   Blacklist MACs for hash filtering.\n"
     printf "  ${GREEN}--essid <ESSID>${NC}         Filter by a specific ESSID.\n"
     printf "  ${GREEN}--vendor <string>${NC}       Filter by a vendor name string.\n"
+    printf "  ${GREEN}--monitor${NC}               For remote_crack: automatically monitor and show results.\n"
     printf "  ${GREEN}-v, --verbose${NC}           Enable verbose output for debugging.\n"
     printf "  ${GREEN}-h, --help${NC}              Show this help message.\n"
     printf "\n"
@@ -551,6 +572,285 @@ run_geotrack() {
     rm -f "$temp_combined_nmea"; echo "KML track file saved to: $KML_FILE"
 }
 
+send_notification() {
+    # Exit if notifications are disabled or the URL is not set
+    if [ "$NOTIFICATION_ENABLED" -ne 1 ] || [ -z "$NOTIFICATION_URL" ]; then
+        return
+    fi
+    
+    # Check for wget or curl
+    if ! command -v wget >/dev/null 2>&1; then
+        printf "%b\n" "${YELLOW}Warning: 'wget' is required for notifications but is not installed.${NC}"
+        return
+    fi
+
+    local title="$1"
+    local message="$2"
+    
+    printf "Sending notification via ${NOTIFICATION_SERVICE}...\n"
+
+    case "$NOTIFICATION_SERVICE" in
+        "ntfy")
+            # ntfy.sh is simple. It uses the message body and a title header.
+            wget -q -O /dev/null --post-data="$message" --header="Title: $title" --header="Tags: tada" "$NOTIFICATION_URL"
+            ;;
+        "discord")
+            # Discord uses a JSON payload with an "embeds" object for nice formatting.
+            # We need to escape special JSON characters from the message.
+            local sanitized_message
+            sanitized_message=$(echo "$message" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/`/\\`/g' | sed -z 's/\n/\\n/g')
+            
+            local json_payload
+            json_payload=$(printf '{"username": "HCX Analyzer", "embeds": [{"title": "%s", "description": "```\n%s\n```", "color": 5814783}]}' "$title" "$sanitized_message")
+            
+            wget -q -O /dev/null --post-data="$json_payload" --header="Content-Type: application/json" "$NOTIFICATION_URL"
+            ;;
+        *)
+            printf "%b\n" "${YELLOW}Warning: Unknown notification service '$NOTIFICATION_SERVICE'.${NC}"
+            ;;
+    esac
+}
+
+run_remote_crack_monitor() {
+    local remote_potfile="$1"
+    local local_hash_file="$2"
+    local temp_potfile="/tmp/analyzer_remote.pot"
+
+    printf "\n%b\n" "${BLUE}--- Monitoring Remote Session (Ctrl+C to stop) ---${NC}"
+
+    local previous_hash
+    previous_hash=$(ssh "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "md5sum '$remote_potfile' 2>/dev/null | cut -d' ' -f1")
+
+    trap 'printf "\nMonitoring stopped by user.\n"; rm -f "$temp_potfile"; exit 0' INT TERM
+
+    while true; do
+        sleep 120
+
+        local current_hash
+        current_hash=$(ssh "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "md5sum '$remote_potfile' 2>/dev/null | cut -d' ' -f1")
+
+        if [ "$current_hash" != "$previous_hash" ] && [ -n "$current_hash" ]; then
+            printf "\n%b [%s]\n" "${YELLOW}🎉 New cracked passwords detected! Retrieving results...${NC}" "$(date '+%Y-%m-%d %H:%M:%S')"
+            
+            if ! scp -q "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${remote_potfile}" "$temp_potfile"; then
+                printf "%b\n" "${RED}Error: Failed to download updated potfile.${NC}"
+                continue
+            fi
+
+            # Capture the output of hashcat --show into a variable
+            local cracked_output
+            cracked_output=$(hashcat --show -m 22000 "$local_hash_file" --potfile-path "$temp_potfile")
+
+            printf "%b\n" "${GREEN}--- Cracked Hashes So Far ---${NC}"
+            echo "$cracked_output" # Display the output on the console
+            printf "%b\n" "${GREEN}-----------------------------${NC}"
+
+            # --- TRIGGER NOTIFICATION ---
+            # Send the captured output as a notification
+            send_notification "HCX Cracked Passwords!" "$cracked_output"
+
+            previous_hash="$current_hash"
+            printf "\n%b" "Monitoring... (Ctrl+C to stop)"
+        else
+            printf "."
+        fi
+    done
+}
+
+run_generate_dashboard() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$CAPTURE_DIR" -name "*.pcapng" 2>/dev/null); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+
+    printf "%b\n" "${CYAN}--- 📊 Generating HTML Dashboard ---${NC}"
+
+    # --- Step 1: Data Gathering ---
+    local TEMP_DIR="/tmp/dashboard_data_$$"
+    mkdir -p "$TEMP_DIR"
+    local ALL_HASHES_FILE="$TEMP_DIR/all_hashes.hc22000"
+    local NETWORKS_CSV_FILE="$TEMP_DIR/networks.csv"
+    local ID_FILE="$TEMP_DIR/identities.txt"
+    local USER_FILE="$TEMP_DIR/usernames.txt"
+    local NMEA_FILE="$TEMP_DIR/track.nmea"
+    local CRACKED_FILE="$TEMP_DIR/cracked_by_defaults.txt"
+    local DASHBOARD_FILE="$ANALYSIS_DIR/dashboard.html"
+    
+    run_with_spinner "Extracting all data from pcapng files..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE" --csv="$NETWORKS_CSV_FILE" -I "$ID_FILE" -U "$USER_FILE" --nmea="$NMEA_FILE"
+
+    run_with_spinner "Checking for default and weak passwords..." "hcxpsktool" -c "$ALL_HASHES_FILE" --netgear --spectrum --weakpass --digit10 --phome --tenda --ee --alticeoptimum --asus --eudate --usdate --wpskeys > "$CRACKED_FILE"
+
+    # --- Step 2: Data Processing & Variable Preparation ---
+    printf "Processing collected data...\n"
+    
+    # Process summary stats
+    local TOTAL_NETWORKS=0; if [ -f "$NETWORKS_CSV_FILE" ]; then TOTAL_NETWORKS=$(tail -n +2 "$NETWORKS_CSV_FILE" | wc -l); fi
+    local TOTAL_HASHES=0; if [ -f "$ALL_HASHES_FILE" ]; then TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE"); fi
+    local TOTAL_CRACKED=0; if [ -f "$CRACKED_FILE" ]; then TOTAL_CRACKED=$(wc -l < "$CRACKED_FILE"); fi
+    local TOTAL_PII=0; if [ -f "$ID_FILE" ]; then TOTAL_PII=$((TOTAL_PII + $(wc -l < "$ID_FILE"))); fi
+    if [ -f "$USER_FILE" ]; then TOTAL_PII=$((TOTAL_PII + $(wc -l < "$USER_FILE"))); fi
+    
+    # Process networks table
+    local NETWORKS_TABLE_ROWS=""
+    if [ -f "$NETWORKS_CSV_FILE" ]; then
+        tail -n +2 "$NETWORKS_CSV_FILE" | while IFS=, read -r bssid essid enc vendor; do
+            # Sanitize for HTML
+            essid=$(echo "$essid" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            vendor=$(echo "$vendor" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            NETWORKS_TABLE_ROWS="${NETWORKS_TABLE_ROWS}<tr><td>${bssid}</td><td>${essid}</td><td>${enc}</td><td>${vendor}</td></tr>"
+        done
+    fi
+
+    # Process cracked passwords table
+    local CRACKED_TABLE_ROWS=""
+    if [ -f "$CRACKED_FILE" ]; then
+        while IFS=: read -r bssid client psk essid; do
+            psk=$(echo "$psk" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            essid=$(echo "$essid" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            CRACKED_TABLE_ROWS="${CRACKED_TABLE_ROWS}<tr><td class='monospace'>${bssid}</td><td>${essid}</td><td class='monospace strong'>${psk}</td></tr>"
+        done < "$CRACKED_FILE"
+    fi
+    
+    # Process PII tables
+    local PII_ID_ROWS=""; local PII_USER_ROWS=""
+    if [ -f "$ID_FILE" ]; then
+        while read -r mac identity; do PII_ID_ROWS="${PII_ID_ROWS}<tr><td class='monospace'>${mac}</td><td>${identity}</td></tr>"; done < "$ID_FILE"
+    fi
+    if [ -f "$USER_FILE" ]; then
+        while read -r mac user; do PII_USER_ROWS="${PII_USER_ROWS}<tr><td class='monospace'>${mac}</td><td>${user}</td></tr>"; done < "$USER_FILE"
+    fi
+    
+    # Process GPS data
+    local GEOJSON_DATA="null"
+    if [ -s "$NMEA_FILE" ] && command -v gpsbabel >/dev/null 2>&1; then
+        printf "Processing GPS data for map...\n"
+        local GEOJSON_FILE="$TEMP_DIR/track.geojson"
+        if gpsbabel -w -t -i nmea -f "$NMEA_FILE" -o geojson -F "$GEOJSON_FILE" >/dev/null 2>&1; then
+            GEOJSON_DATA=$(cat "$GEOJSON_FILE")
+        fi
+    fi
+
+    # --- Step 3: HTML Generation ---
+    printf "Generating self-contained HTML file...\n"
+    
+    # Use a Here Document to create the HTML file. This is much cleaner than multiple echo statements.
+    cat <<EOF > "$DASHBOARD_FILE"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-g">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HCX-Analyzer Report</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        :root {
+            --bg-color: #1a1a1a; --text-color: #e0e0e0; --header-bg: #2c2c2c; --table-bg: #252525;
+            --border-color: #444; --accent-color: #00aaff; --green-color: #00ffaa; --yellow-color: #ffaa00;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+               background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { background-color: var(--header-bg); padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border-color); }
+        header h1 { margin: 0; color: var(--accent-color); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background-color: var(--table-bg); padding: 20px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); }
+        .stat-card .value { font-size: 2.5em; font-weight: bold; color: var(--green-color); }
+        .stat-card .label { font-size: 1.1em; color: var(--text-color); }
+        .section { background-color: var(--header-bg); padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border-color); }
+        .section h2 { margin-top: 0; border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { background-color: var(--table-bg); }
+        tr:hover { background-color: #333; }
+        .monospace { font-family: "SF Mono", "Menlo", "Monaco", monospace; }
+        .strong { font-weight: bold; color: var(--yellow-color); }
+        #map { height: 500px; border-radius: 8px; border: 1px solid var(--border-color); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HCX-Analyzer Dashboard</h1>
+            <p>Report generated on: $(date)</p>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card"><div class="value">${TOTAL_NETWORKS}</div><div class="label">Networks</div></div>
+            <div class="stat-card"><div class="value">${TOTAL_HASHES}</div><div class="label">Total Hashes</div></div>
+            <div class="stat-card"><div class="value">${TOTAL_CRACKED}</div><div class="label">Cracked by Defaults</div></div>
+            <div class="stat-card"><div class="value">${TOTAL_PII}</div><div class="label">PII Found</div></div>
+        </div>
+
+        <div class="section">
+            <h2><span class="monospace strong">🔑</span> Cracked Passwords</h2>
+            <table>
+                <thead><tr><th>BSSID</th><th>ESSID</th><th>Password (PSK)</th></tr></thead>
+                <tbody>${CRACKED_TABLE_ROWS:-"<tr><td colspan='3'>No default passwords found.</td></tr>"}</tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>🗺️ GPS Wardriving Map</h2>
+            <div id="map"></div>
+        </div>
+        
+        <div class="section">
+            <h2><span class="monospace">📶</span> Discovered Networks</h2>
+            <table>
+                <thead><tr><th>BSSID</th><th>ESSID</th><th>Encryption</th><th>Vendor</th></tr></thead>
+                <tbody>${NETWORKS_TABLE_ROWS:-"<tr><td colspan='4'>No networks found.</td></tr>"}</tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2><span class="monospace">👤</span> Personally Identifiable Information (PII)</h2>
+            <h3>Enterprise Identities</h3>
+            <table>
+                <thead><tr><th>Source MAC</th><th>Identity</th></tr></thead>
+                <tbody>${PII_ID_ROWS:-"<tr><td colspan='2'>No identities found.</td></tr>"}</tbody>
+            </table>
+            <h3 style="margin-top:20px;">Enterprise Usernames</h3>
+            <table>
+                <thead><tr><th>Source MAC</th><th>Username</th></tr></thead>
+                <tbody>${PII_USER_ROWS:-"<tr><td colspan='2'>No usernames found.</td></tr>"}</tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const geoJsonData = ${GEOJSON_DATA};
+        const mapElement = document.getElementById('map');
+        
+        if (geoJsonData && geoJsonData.features && geoJsonData.features.length > 0) {
+            // Use the first coordinate of the first feature as the initial center of the map
+            const initialCoords = geoJsonData.features[0].geometry.coordinates[0];
+            const map = L.map('map').setView([initialCoords[1], initialCoords[0]], 14);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            const trackStyle = { "color": "#00aaff", "weight": 5, "opacity": 0.8 };
+            const geoJsonLayer = L.geoJSON(geoJsonData, { style: trackStyle }).addTo(map);
+            
+            // Fit the map view to the bounds of the entire track
+            map.fitBounds(geoJsonLayer.getBounds());
+        } else {
+            mapElement.innerHTML = '<p style="text-align:center; padding: 20px;">No GPS data found to display map. Install gpsbabel and ensure captures have NMEA data.</p>';
+            mapElement.style.height = 'auto';
+        }
+    </script>
+</body>
+</html>
+EOF
+
+    # --- Step 4: Cleanup ---
+    rm -rf "$TEMP_DIR"
+    printf "\n%b\n" "${GREEN}--- ✅ Dashboard Complete ---${NC}"
+    printf "Report saved to: %s\n" "${BLUE}${DASHBOARD_FILE}${NC}"
+}
+
 run_remote_crack() {
     shift
     local files_to_process="$@"
@@ -568,13 +868,24 @@ run_remote_crack() {
     printf "Are you sure? [y/N] "; read -r response
     if ! (echo "$response" | grep -qE '^[yY]([eE][sS])?$'); then echo "Cancelled."; return; fi
     run_with_spinner "Uploading hash file..." "scp" "$ALL_HASHES_FILE" "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${REMOTE_CAPTURE_PATH}/" || return 1
-    local remote_hash_file="${REMOTE_CAPTURE_PATH}/$(basename "$ALL_HASHES_FILE")"; local remote_potfile="${REMOTE_CAPTURE_PATH}/cracked.pot"
+    
+    local remote_hash_file="${REMOTE_CAPTURE_PATH}/$(basename "$ALL_HASHES_FILE")"
+    local remote_potfile="${REMOTE_CAPTURE_PATH}/cracked.pot"
     local HASHCAT_CMD="'$REMOTE_HASHCAT_PATH' -m 22000 '$remote_hash_file' '$REMOTE_WORDLIST_PATH' --potfile-path '$remote_potfile'"
+    
     printf "\n%b\n" "${BLUE}--- Starting Remote Hashcat Session ---${NC}"
     ssh "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "nohup sh -c \"${HASHCAT_CMD}\" > /dev/null 2>&1 &" || { printf "%b\n" "${RED}SSH command failed.${NC}"; return 1; }
-    printf "\n%b\n" "${GREEN}--- Remote Cracking Session Started! ---${NC}"
-    printf "To retrieve cracked passwords, run:\n"
-    printf "%b\n" "${CYAN}scp \"${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${remote_potfile}\" . && hashcat --show -m 22000 ${ALL_HASHES_FILE} --potfile-path cracked.pot${NC}"
+    
+    # This is the new logic block
+    if [ "$MONITOR_CRACK" -eq 1 ]; then
+        # Call the new monitoring function
+        run_remote_crack_monitor "$remote_potfile" "$ALL_HASHES_FILE"
+    else
+        # This is the original behavior for non-monitored sessions
+        printf "\n%b\n" "${GREEN}--- Remote Cracking Session Started! ---${NC}"
+        printf "To retrieve cracked passwords manually, run:\n"
+        printf "%b\n" "${CYAN}scp \"${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}:${remote_potfile}\" . && hashcat --show -m 22000 ${ALL_HASHES_FILE} --potfile-path cracked.pot${NC}"
+    fi
 }
 
 #==============================================================================
@@ -716,27 +1027,414 @@ EOF
 # SCRIPT EXECUTION LOGIC
 #==============================================================================
 
-run_health_check() {
-    printf "%b\n" "${CYAN}--- Running Health Check ---${NC}"; local required_version="6.2.7"; local check_passed=1
-    printf "%b\n" "${BLUE}--- Local System ---${NC}"; local local_version=$(hcxpcapngtool -v 2>/dev/null | head -n 1 | awk '{print $2}')
-    if [ -z "$local_version" ]; then printf "%b\n" "[${RED}FAIL${NC}] hcxtools not found."; check_passed=0; else
-        printf "[..] Found hcxtools version: %s\n" "$local_version"; version_ge "$local_version" "$required_version"
-        if [ $? -eq 0 ]; then printf "%b\n" "[${GREEN}OK${NC}] Version is compatible (>= $required_version)."; else
-            printf "%b\n" "[${RED}FAIL${NC}] Version is not compatible. Please upgrade."; check_passed=0; fi
+run_cloud_sync() {
+    printf "\n%b\n" "${BLUE}--- ☁️ Cloud Storage Synchronization ---${NC}"
+
+    # --- Step 1: Check Dependencies & Configuration ---
+    if [ "$CLOUD_SYNC_ENABLED" -ne 1 ]; then
+        printf "%b\n" "${YELLOW}Cloud sync is disabled in the configuration file.${NC}"
+        return 1
     fi
-    if [ "$REMOTE_SERVER_ENABLED" -eq 1 ]; then
-        printf "\n%b\n" "${BLUE}--- Remote System (${REMOTE_SERVER_HOST}) ---${NC}"
-        local remote_version=$(ssh "${REMOTE_SERVER_USER}@${REMOTE_SERVER_HOST}" "hcxpcapngtool -v" 2>/dev/null | head -n 1 | awk '{print $2}')
-        if [ -z "$remote_version" ]; then printf "%b\n" "[${RED}FAIL${NC}] hcxtools not found on remote or SSH failed."; check_passed=0; else
-            printf "[..] Found hcxtools version: %s\n" "$remote_version"; version_ge "$remote_version" "$required_version"
-            if [ $? -eq 0 ]; then printf "%b\n" "[${GREEN}OK${NC}] Version is compatible (>= $required_version)."; else
-                printf "%b\n" "[${RED}FAIL${NC}] Version is not compatible. Please upgrade."; check_passed=0; fi
+    if ! command -v rclone >/dev/null 2>&1; then
+        printf "%b\n" "${RED}Error: 'rclone' is required but not installed. Please run 'opkg install rclone'.${NC}"
+        return 1
+    fi
+    if [ -z "$RCLONE_REMOTE_NAME" ]; then
+        printf "%b\n" "${RED}Error: RCLONE_REMOTE_NAME is not set in your config file.${NC}"
+        printf "Please run 'rclone config' to set up a remote and add its name to the config.\n"
+        return 1
+    fi
+
+    local remote_full_path="${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}"
+
+    # --- Step 2: Upload New Files ---
+    printf "\n%b\n" "${CYAN}--- Uploading Local Files to ${remote_full_path} ---${NC}"
+    
+    printf "Uploading new captures from %s...\n" "$CAPTURE_DIR"
+    rclone copy "$CAPTURE_DIR" "${remote_full_path}/captures/" --include="*.pcapng" --progress
+    
+    printf "\nUploading analysis results from %s...\n" "$ANALYSIS_DIR"
+    rclone copy "$ANALYSIS_DIR" "${remote_full_path}/analysis/" --include="*.{txt,csv,kml,hc22000,html}" --progress
+    
+    # --- Step 3: Download Remote Results ---
+    printf "\n%b\n" "${CYAN}--- Downloading Remote Files from ${remote_full_path} ---${NC}"
+    printf "Syncing remote potfile to local analysis directory...\n"
+    # Use 'copy' to ensure we get the latest version from the cloud without deleting local files.
+    rclone copy "${remote_full_path}/results/" "$ANALYSIS_DIR/" --include="*.pot" --progress
+
+    printf "\n%b\n" "${GREEN}--- ✅ Cloud Sync Complete ---${NC}"
+}
+
+run_setup_remote() {
+    printf "\n%b\n" "${CYAN}--- Interactive Remote Server Setup Wizard ---${NC}"
+    printf "This wizard will help you configure a remote server for analysis and cracking.\n"
+    printf "It will guide you through setting up passwordless SSH access and checking dependencies.\n\n"
+
+    # --- Step 1: Gather User Input ---
+    local remote_user
+    local remote_host
+    printf "%b" "Please enter the username for the remote server (e.g., root, user): "
+    read -r remote_user
+    if [ -z "$remote_user" ]; then printf "\n%b\n" "${RED}Username cannot be empty. Aborting.${NC}"; return 1; fi
+
+    printf "%b" "Please enter the IP address or hostname of the remote server: "
+    read -r remote_host
+    if [ -z "$remote_host" ]; then printf "\n%b\n" "${RED}Hostname cannot be empty. Aborting.${NC}"; return 1; fi
+    
+    printf "\n%b\n" "${BLUE}--- Step 2: Configure SSH Access ---${NC}"
+    
+    # Check for local SSH key
+    if [ ! -f "$HOME/.ssh/id_rsa" ]; then
+        printf "%b\n" "${YELLOW}No local SSH key found.${NC}"
+        printf "An SSH key is required for passwordless login. Shall I generate one now? [y/N] "
+        read -r response
+        if [ "$response" = "y" ] || [ "$response" = "Y" ]; then
+            printf "Generating SSH key...\n"
+            ssh-keygen -t rsa -b 4096 -f "$HOME/.ssh/id_rsa" -N ""
+        else
+            printf "%b\n" "${RED}SSH key is required to proceed. Aborting.${NC}"
+            return 1
         fi
     fi
-    if [ "$check_passed" -eq 1 ]; then printf "\n%b\n" "${GREEN}Health check passed.${NC}"; else printf "\n%b\n" "${RED}Health check failed.${NC}"; fi
+
+    # Copy public key to remote server
+    printf "\nTo enable passwordless access, I need to copy your public SSH key to the remote server.\n"
+    printf "You will be prompted for '${YELLOW}${remote_user}@${remote_host}${NC}'s' password ${RED}one last time${NC}.\n"
+    if ! ssh-copy-id "${remote_user}@${remote_host}"; then
+        printf "\n%b\n" "${RED}Failed to copy SSH key. Please check your username, host, and password. Aborting.${NC}"
+        return 1
+    fi
+    
+    printf "\n%b\n" "${GREEN}SSH key successfully copied!${NC}"
+    printf "Testing passwordless connection... "
+    if ssh -o 'BatchMode=yes' -o 'ConnectTimeout=5' "${remote_user}@${remote_host}" 'echo "Success"' >/dev/null 2>&1; then
+        printf "%b\n" "${GREEN}OK${NC}"
+    else
+        printf "\n%b\n" "${RED}Failed to establish a passwordless connection. Aborting.${NC}"
+        return 1
+    fi
+
+    # --- Step 3: Check Remote Dependencies ---
+    printf "\n%b\n" "${BLUE}--- Step 3: Check Remote Dependencies ---${NC}"
+    local hcx_ok=0
+    local hashcat_ok=0
+    printf "Checking for hcxtools... "
+    if ssh "${remote_user}@${remote_host}" 'command -v hcxpcapngtool' >/dev/null 2>&1; then
+        printf "%b\n" "${GREEN}Found${NC}"; hcx_ok=1
+    else
+        printf "%b\n" "${RED}Not Found${NC}"
+    fi
+    printf "Checking for hashcat... "
+    if ssh "${remote_user}@${remote_host}" 'command -v hashcat' >/dev/null 2>&1; then
+        printf "%b\n" "${GREEN}Found${NC}"; hashcat_ok=1
+    else
+        printf "%b\n" "${RED}Not Found${NC}"
+    fi
+
+    # --- Step 4: Attempt to Install Missing Dependencies ---
+    if [ "$hcx_ok" -eq 0 ] || [ "$hashcat_ok" -eq 0 ]; then
+        printf "\n%b\n" "${YELLOW}One or more dependencies are missing.${NC}"
+        printf "Shall I attempt to install them automatically? (This may require sudo password on the remote machine) [y/N] "
+        read -r install_response
+        if [ "$install_response" = "y" ] || [ "$install_response" = "Y" ]; then
+            printf "Detecting remote operating system... "
+            local os_type
+            os_type=$(ssh "${remote_user}@${remote_host}" "if [ -f /etc/debian_version ]; then echo 'debian'; elif [ -f /etc/redhat-release ]; then echo 'redhat'; elif [ -f /etc/arch-release ]; then echo 'arch'; else echo 'unknown'; fi")
+            printf "%s\n" "$os_type"
+
+            local install_cmd=""
+            case "$os_type" in
+                "debian") install_cmd="sudo apt-get update && sudo apt-get install -y hcxtools hashcat";;
+                "redhat") install_cmd="sudo yum install -y epel-release && sudo yum install -y hcxtools hashcat";;
+                "arch") install_cmd="sudo pacman -Syu --noconfirm hcxtools hashcat";;
+                *) printf "%b\n" "${RED}Unsupported OS for automatic installation. Please install manually.${NC}";;
+            esac
+
+            if [ -n "$install_cmd" ]; then
+                printf "Running installation command on remote host:\n${YELLOW}%s${NC}\n" "$install_cmd"
+                ssh -t "${remote_user}@${remote_host}" "$install_cmd"
+                # Re-check after installation
+                printf "\nRe-checking for hcxtools... "
+                if ssh "${remote_user}@${remote_host}" 'command -v hcxpcapngtool' >/dev/null 2>&1; then printf "%b\n" "${GREEN}Found${NC}"; else printf "%b\n" "${RED}Failed${NC}"; fi
+                printf "Re-checking for hashcat... "
+                if ssh "${remote_user}@${remote_host}" 'command -v hashcat' >/dev/null 2>&1; then printf "%b\n" "${GREEN}Found${NC}"; else printf "%b\n" "${RED}Failed${NC}"; fi
+            fi
+        fi
+    fi
+
+    # --- Step 5: Update Configuration File ---
+    printf "\n%b\n" "${BLUE}--- Step 4: Save Configuration ---${NC}"
+    printf "The remote server setup seems complete.\n"
+    printf "Shall I save these settings to '${YELLOW}/etc/hcxtools/hcxscript.conf${NC}'? [y/N] "
+    read -r save_response
+    if [ "$save_response" = "y" ] || [ "$save_response" = "Y" ]; then
+        local CONFIG_FILE="/etc/hcxtools/hcxscript.conf"
+        if [ ! -f "$CONFIG_FILE" ]; then touch "$CONFIG_FILE"; fi
+        local TEMP_CONF="/tmp/hcxconf.tmp.$$"
+        
+        # Atomically update the config file by rebuilding it
+        grep -vE '^(# *)?REMOTE_ANALYSIS_ENABLED=|^(# *)?REMOTE_HOST=|^(# *)?REMOTE_USER=' "$CONFIG_FILE" > "$TEMP_CONF"
+        
+        printf "\n# Settings updated by --utility setup-remote on %s\n" "$(date)" >> "$TEMP_CONF"
+        printf "REMOTE_ANALYSIS_ENABLED=1\n" >> "$TEMP_CONF"
+        printf "REMOTE_HOST=\"%s\"\n" "$remote_host" >> "$TEMP_CONF"
+        printf "REMOTE_USER=\"%s\"\n" "$remote_user" >> "$TEMP_CONF"
+        
+        # Check if we can write to the file, use sudo if necessary
+        if mv "$TEMP_CONF" "$CONFIG_FILE" 2>/dev/null; then
+            printf "%b\n" "${GREEN}Configuration saved successfully!${NC}"
+        elif sudo -n true 2>/dev/null; then # Check for non-interactive sudo
+            printf "Attempting to save configuration with sudo...\n"
+            if sudo mv "$TEMP_CONF" "$CONFIG_FILE"; then
+                 printf "%b\n" "${GREEN}Configuration saved successfully!${NC}"
+            else
+                 printf "%b\n" "${RED}Failed to save configuration even with sudo.${NC}"
+                 rm -f "$TEMP_CONF"
+            fi
+        else
+            printf "%b\n" "${RED}Failed to save configuration. Please run this command to complete the process:${NC}"
+            printf "sudo mv %s %s\n" "$TEMP_CONF" "$CONFIG_FILE"
+        fi
+    fi
+
+    printf "\n%b\n" "${GREEN}--- ✅ Remote Setup Complete ---${NC}"
+    printf "Remote host ${YELLOW}%s@%s${NC} is ready for analysis.\n" "$remote_user" "$remote_host"
+}
+
+run_trends() {
+    printf "\n%b\n" "${BLUE}--- 📈 Historical Trend Analysis ---${NC}"
+
+    # --- Step 1: Check Dependencies ---
+    if [ ! -f "$DB_FILE" ] || [ ! -s "$DB_FILE" ]; then
+        printf "%b\n" "${RED}Error: Database file not found or is empty at '${DB_FILE}'.${NC}"
+        printf "Please run '--mode db' first to populate the database with historical data.\n"
+        return 1
+    fi
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        printf "%b\n" "${RED}Error: 'sqlite3' is required for this utility but is not installed.${NC}"
+        return 1
+    fi
+
+    local query_result
+    local count=0
+
+    # --- Section 1: New Discoveries (Last 7 Days) ---
+    printf "\n%b\n" "${CYAN}--- Newly Discovered Devices (Last 7 Days) ---${NC}"
+    printf "%b\n" "${YELLOW}Networks:${NC}"
+    query_result=$(sqlite3 -separator '|' "$DB_FILE" "SELECT bssid, essid_b64, vendor FROM networks WHERE first_seen >= date('now', '-7 days');")
+    if [ -z "$query_result" ]; then
+        printf "  -> None found.\n"
+    else
+        echo "$query_result" | while IFS="|" read -r bssid essid_b64 vendor; do
+            local essid_plain
+            essid_plain=$(echo "$essid_b64" | base64 -d 2>/dev/null)
+            printf "  - %-18s %-25s (%s)\n" "$bssid" "$essid_plain" "$vendor"
+        done
+    fi
+
+    printf "%b\n" "${YELLOW}Clients:${NC}"
+    query_result=$(sqlite3 -separator '|' "$DB_FILE" "SELECT mac, vendor FROM clients WHERE first_seen >= date('now', '-7 days');")
+    if [ -z "$query_result" ]; then
+        printf "  -> None found.\n"
+    else
+        echo "$query_result" | while IFS="|" read -r mac vendor; do
+            printf "  - %-18s (%s)\n" "$mac" "$vendor"
+        done
+    fi
+
+    # --- Section 2: Stale Devices (Not Seen in 30+ Days) ---
+    printf "\n%b\n" "${CYAN}--- Stale Devices (Not Seen in 30+ Days) ---${NC}"
+    printf "%b\n" "${YELLOW}Networks:${NC}"
+    query_result=$(sqlite3 -separator '|' "$DB_FILE" "SELECT bssid, essid_b64, last_seen FROM networks WHERE last_seen <= date('now', '-30 days');")
+     if [ -z "$query_result" ]; then
+        printf "  -> None found.\n"
+    else
+        echo "$query_result" | while IFS="|" read -r bssid essid_b64 last_seen; do
+            local essid_plain
+            essid_plain=$(echo "$essid_b64" | base64 -d 2>/dev/null)
+            printf "  - %-18s %-25s (Last seen: %s)\n" "$bssid" "$essid_plain" "$last_seen"
+        done
+    fi
+
+    # --- Section 3: Recent Cracking Activity (Last 24 Hours) ---
+    printf "\n%b\n" "${CYAN}--- Recently Cracked Passwords (Last 24 Hours) ---${NC}"
+    query_result=$(sqlite3 -separator '|' "$DB_FILE" "SELECT essid_b64, psk, cracked_timestamp FROM hashes WHERE cracked_timestamp >= datetime('now', '-1 day');")
+    if [ -z "$query_result" ]; then
+        printf "  -> No passwords cracked in the last 24 hours.\n"
+    else
+        echo "$query_result" | while IFS="|" read -r essid_b64 psk cracked_timestamp; do
+            local essid_plain
+            essid_plain=$(echo "$essid_b64" | base64 -d 2>/dev/null)
+            printf "  - %b%-25s${NC} -> PSK: %b%s${NC} (Cracked: %s)\n" "${GREEN}" "$essid_plain" "${YELLOW}" "$psk" "$cracked_timestamp"
+        done
+    fi
 }
 
 version_ge() { [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" != "$1" ]; }
+
+run_recommend() {
+    shift
+    local files_to_process="$@"
+    if [ -z "$files_to_process" ]; then files_to_process=$(find "$CAPTURE_DIR" -name "*.pcapng" 2>/dev/null); fi
+    if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
+
+    printf "%b\n" "${CYAN}--- 🧠 Running Strategic Recommendation Engine ---${NC}"
+
+    # --- Step 1: Data Gathering ---
+    local TEMP_DIR="/tmp/recommend_data_$$"
+    mkdir -p "$TEMP_DIR"
+    local ALL_HASHES_FILE="$TEMP_DIR/all_hashes.hc22000"
+    local ID_FILE="$TEMP_DIR/identities.txt"
+    local USER_FILE="$TEMP_DIR/usernames.txt"
+    local NMEA_FILE="$TEMP_DIR/track.nmea"
+    local ESSID_FILE="$TEMP_DIR/essids.txt"
+
+    run_with_spinner "Performing initial data extraction..." "hcxpcapngtool" $files_to_process -o "$ALL_HASHES_FILE" -I "$ID_FILE" -U "$USER_FILE" --nmea="$NMEA_FILE" -E "$ESSID_FILE"
+    
+    # --- Step 2: Analysis ---
+    local TOTAL_HASHES=0; if [ -f "$ALL_HASHES_FILE" ]; then TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE"); fi
+    local PMKID_COUNT=0; local EAPOL_COUNT=0
+    if [ "$TOTAL_HASHES" -gt 0 ]; then
+        PMKID_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=1 2>/dev/null | wc -l)
+        EAPOL_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=2 2>/dev/null | wc -l)
+    fi
+    local PII_COUNT=0; if [ -f "$ID_FILE" ]; then PII_COUNT=$((PII_COUNT + $(wc -l < "$ID_FILE"))); fi
+    if [ -f "$USER_FILE" ]; then PII_COUNT=$((PII_COUNT + $(wc -l < "$USER_FILE"))); fi
+    local HAS_GPS_DATA=0; if [ -s "$NMEA_FILE" ]; then HAS_GPS_DATA=1; fi
+    local ESSID_COUNT=0; if [ -f "$ESSID_FILE" ]; then ESSID_COUNT=$(wc -l < "$ESSID_FILE"); fi
+
+    # --- Step 3: Recommendation Logic ---
+    local recommendations=""
+    add_recommendation() {
+        local priority="$1"
+        local title="$2"
+        local detail="$3"
+        # Use a special separator (e.g., |) to store structured recommendations
+        recommendations="${recommendations}${priority}|${title}|${detail}\n"
+    }
+
+    if [ "$TOTAL_HASHES" -eq 0 ]; then
+        add_recommendation "High" "Poor Capture Results" "No crackable hashes were found. To improve results, try running 'hcxdumptool-launcher --hunt-handshakes' to actively deauthenticate clients and force handshakes."
+    else
+        # PMKID vs EAPOL analysis
+        if [ "$PMKID_COUNT" -gt $((EAPOL_COUNT * 2)) ]; then
+            add_recommendation "High" "PMKID Dominance Detected" "The capture contains significantly more PMKIDs than client handshakes. This is excellent for passive attacks. Focus on cracking these first. Use '--type 1' in hash filtering."
+        elif [ "$EAPOL_COUNT" -gt $((PMKID_COUNT * 2)) ]; then
+            add_recommendation "Medium" "Client Handshake Dominance" "You have a high number of client-based handshakes. This is a strong position for cracking. Consider running '--mode vuln' to check for common passwords."
+        fi
+
+        # PII analysis
+        if [ "$PII_COUNT" -gt 0 ]; then
+            add_recommendation "Critical" "Enterprise Credentials Found" "WPA-Enterprise identities or usernames were discovered. This is a significant finding. Use '--mode pii' to view the credentials and consider them for targeted password attacks."
+        fi
+
+        # ESSID analysis
+        if [ "$ESSID_COUNT" -gt 10 ]; then
+            add_recommendation "Medium" "High Network Density" "A large number of unique network names (ESSIDs) were found. People often reuse parts of network names in passwords. Use '--utility generate_wordlist' to create a custom, targeted wordlist from them."
+        fi
+    fi
+
+    # GPS analysis
+    if [ "$HAS_GPS_DATA" -eq 1 ]; then
+        add_recommendation "Low" "GPS Data Available" "Your captures contain GPS tracks. Visualize your wardriving session by running '--utility generate-dashboard' to see the data on a map."
+    fi
+
+    # --- Step 4: Formatted Output ---
+    printf "\n%b\n" "${CYAN}--- 🔍 Strategic Recommendations ---${NC}"
+    printf "Based on the analysis of your capture data, here are some suggested next steps:\n"
+
+    if [ -z "$recommendations" ]; then
+        printf "\n%b\n" "${GREEN}▶ No specific high-priority vectors were identified from this analysis. Your capture contains a standard mix of data. Consider running a general '--mode vuln' scan to check for weak default passwords.${NC}"
+    else
+        # Sort recommendations by priority and print
+        printf "%b" "$recommendations" | sort -t'|' -k1 | while IFS="|" read -r priority title detail; do
+            local color="${GREEN}"
+            if [ "$priority" = "High" ]; then color="${YELLOW}"; fi
+            if [ "$priority" = "Critical" ]; then color="${RED}"; fi
+            
+            printf "\n%b[%s] %s${NC}\n" "$color" "$priority" "$title"
+            printf "   %s\n" "$detail"
+        done
+    fi
+
+    # Cleanup
+    rm -rf "$TEMP_DIR"
+}
+
+run_find_reuse_targets() {
+    printf "\n%b\n" "${CYAN}--- 🔎 Finding Potential Credential Reuse Targets ---${NC}"
+
+    # --- Step 1: Check Dependencies ---
+    if [ ! -f "$DB_FILE" ] || [ ! -s "$DB_FILE" ]; then
+        printf "%b\n" "${RED}Error: Database file not found or is empty at '${DB_FILE}'.${NC}"
+        printf "Please run '--mode db' first to populate the database.\n"
+        return 1
+    fi
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        printf "%b\n" "${RED}Error: 'sqlite3' is required for this utility but is not installed.${NC}"
+        return 1
+    fi
+
+    local TEMP_DIR="/tmp/reuse_targets_$$"
+    mkdir -p "$TEMP_DIR"
+    # Set a trap to ensure temporary files are cleaned up on exit
+    trap 'rm -rf "$TEMP_DIR"; trap - INT TERM EXIT' INT TERM EXIT
+
+    # --- Step 2: Extract and Sort Data using Temp Files ---
+    printf "Analyzing database...\n"
+    
+    # Get all cracked passwords and save to a sorted temp file
+    local cracked_query="SELECT essid_b64, psk FROM hashes WHERE psk IS NOT NULL AND psk != '';"
+    sqlite3 -separator '|' "$DB_FILE" "$cracked_query" | sort -u -t'|' -k1,1 > "$TEMP_DIR/cracked.sorted"
+
+    if [ ! -s "$TEMP_DIR/cracked.sorted" ]; then
+        printf "%b\n" "${YELLOW}No cracked passwords found in the database to check against.${NC}"
+        return 0
+    fi
+
+    # Get all uncracked networks and save to a sorted temp file
+    local uncracked_query="SELECT bssid, essid_b64 FROM hashes WHERE psk IS NULL OR psk = '';"
+    sqlite3 -separator '|' "$DB_FILE" "$uncracked_query" | sort -u -t'|' -k2,2 > "$TEMP_DIR/uncracked.sorted"
+
+    # --- Step 3: Join the data and Generate the Report ---
+    printf "\n%b\n" "${BLUE}--- Credential Reuse Report ---${NC}"
+
+    # 'join' is a POSIX utility that finds matching lines in two sorted files.
+    # Here, it joins on the base64 ESSID field.
+    # The output format will be: essid_b64|psk|bssid
+    join -t'|' -1 1 -2 2 "$TEMP_DIR/cracked.sorted" "$TEMP_DIR/uncracked.sorted" | \
+    # Pipe the results into awk for professional formatting
+    awk -F'|' '
+        # This function decodes base64, which is safer inside awk
+        function b64dec(s,   cmd, line) {
+            cmd = "echo " s " | base64 -d 2>/dev/null";
+            cmd | getline line;
+            close(cmd);
+            return line;
+        }
+
+        # For each line from join, store the target BSSID under the ESSID
+        {
+            essid = $1;
+            psk[essid] = $2;
+            targets[essid] = targets[essid] "        - " $3 "\n";
+        }
+
+        END {
+            if (length(psk) == 0) {
+                 printf "\n%b\n", "\033[0;32mNo instances of potential credential reuse were found.\033[0m";
+            } else {
+                for (essid in psk) {
+                    essid_plain = b64dec(essid);
+                    printf "\n\033[0;32m[+] ESSID:\033[0m %s\n", essid_plain;
+                    printf "    \033[1;33mKnown PSK:\033[0m  %s\n", psk[essid];
+                    printf "    \033[0;36mPotential Reuse Targets (BSSIDs):\033[0m\n";
+                    printf "%s", targets[essid];
+                }
+            }
+        }
+    '
+}
 
 run_interactive_mode() {
     local prompt_prefix=""; [ "$1" = "remote" ] && prompt_prefix="${RED}[REMOTE]${NC} "
@@ -776,10 +1474,12 @@ main() {
             --remote-utility) REMOTE_ACTION=1; UTILITY_ACTION="$2"; shift 2;;
             --summary-mode) SUMMARY_MODE="$2"; shift 2;;
             --remote-host) REMOTE_SERVER_HOST="$2"; shift 2;;
+            --tag) SESSION_TAG="$2"; shift 2;;
             --mac-list) MAC_LIST="$2"; shift 2;;
             --mac-skiplist) MAC_SKIPLIST="$2"; shift 2;;
             --essid) ESSID_FILTER="$2"; shift 2;;
             --essid-regex) ESSID_REGEX="$2"; shift 2;;
+            --monitor) MONITOR_CRACK=1; shift;;
             --vendor) VENDOR_FILTER="$2"; shift 2;;
             --essid-min) ESSID_MIN_LEN="$2"; shift 2;;
             --essid-max) ESSID_MAX_LEN="$2"; shift 2;;
@@ -800,15 +1500,51 @@ main() {
     if [ -n "$MODE" ]; then action_to_run=$MODE; action_type="mode"; elif [ -n "$UTILITY_ACTION" ]; then action_to_run=$UTILITY_ACTION; action_type="utility"; fi
     if [ -z "$action_to_run" ]; then printf "%b\n" "${RED}No valid action specified.${NC}"; exit 1; fi
     if [ "$action_to_run" = "health_check" ]; then run_health_check; exit 0; fi
-    local files_to_process=""; local target_paths="$TARGET_ARGS"; if [ -z "$target_paths" ]; then target_paths="$CAPTURE_DIR"; fi
+    
+    # --- New File Discovery Logic with Tag Filtering ---
+    local files_to_process=""
+    local target_paths="$TARGET_ARGS"
+    if [ -z "$target_paths" ]; then target_paths="$CAPTURE_DIR"; fi
+
+    # Determine the file pattern based on the action and tag
+    local find_name_pattern=""
+    if [ "$action_to_run" = "merge_hashes" ]; then
+        find_name_pattern="*.hc22000"
+    elif [ "$action_to_run" = "geotrack" ]; then
+        find_name_pattern="*.nmea"
+    else
+        if [ -n "$SESSION_TAG" ]; then
+            local sanitized_tag
+            sanitized_tag=$(echo "$SESSION_TAG" | tr -cd '[:alnum:]_-')
+            find_name_pattern="*${sanitized_tag}*.pcapng"
+        else
+            find_name_pattern="*.pcapng"
+        fi
+    fi
+    
     for path in $target_paths; do
         if [ -d "$path" ]; then
-            if [ "$action_to_run" = "merge_hashes" ]; then files_to_process="$files_to_process $(find "$path" -name '*.hc22000')";
-            elif [ "$action_to_run" = "geotrack" ]; then files_to_process="$files_to_process $(find "$path" -name '*.nmea')";
-            else files_to_process="$files_to_process $(find "$path" -name '*.pcapng')"; fi
-        elif [ -f "$path" ]; then files_to_process="$files_to_process $path"; fi
+            # Use find to get files matching the pattern
+            local found_files
+            found_files=$(find "$path" -name "$find_name_pattern")
+            if [ -n "$found_files" ]; then
+                files_to_process="$files_to_process $found_files"
+            fi
+        elif [ -f "$path" ]; then
+            # If a specific file is provided, add it regardless of tag
+            files_to_process="$files_to_process $path"
+        fi
     done
-    if [ -z "$files_to_process" ] && [ "$action_to_run" != "interactive" ]; then printf "%b\n" "${YELLOW}No relevant files found.${NC}"; exit 0; fi
+
+    if [ -z "$files_to_process" ] && [ "$action_to_run" != "interactive" ]; then
+        if [ -n "$SESSION_TAG" ]; then
+             printf "%b\n" "${YELLOW}No relevant files found for tag: '$SESSION_TAG'${NC}"
+        else
+             printf "%b\n" "${YELLOW}No relevant files found.${NC}"
+        fi
+        exit 0
+    fi
+    
     set -- $files_to_process
     if [ "$REMOTE_ACTION" -eq 1 ]; then
         run_remote_execution "$action_type" "$action_to_run" "$@"
