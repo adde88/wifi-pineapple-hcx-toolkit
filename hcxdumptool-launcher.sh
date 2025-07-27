@@ -116,56 +116,77 @@ show_full_help() {
     echo
     echo -e "${CYAN}--- Advanced Usage & Examples ---${NC}"
     echo
-    echo -e "${BLUE}Standard Examples (hcxdumptool backend):${NC}"
-    echo "  # Hunt for handshakes (default backend)"
-    echo "  $SCRIPT_CMD -i wlan2 --hunt-handshakes -d 600"
+    echo -e "${BLUE}Use Case 1: Continuous Wardriving with GPS${NC}"
+    echo "  # Run a continuous capture, creating a new file every 5 minutes (300s)"
+    echo "  # and logging GPS data."
+    echo "  $SCRIPT_CMD -i wlan2 --wardriving-loop 300 --enable-gps"
     echo
-    echo "  # Blacklist your own devices to avoid capturing them"
-    echo "  $SCRIPT_CMD -i wlan2 --filter-file my_devices.txt --filter-mode blacklist"
+    echo -e "${BLUE}Use Case 2: Stealthy Client Handshake Hunt${NC}"
+    echo "  # Use the hcxlabtool backend to capture client probes without sending deauths."
+    echo "  $SCRIPT_CMD -i wlan2 --backend hcxlabtool --client-only-hunt -d 600"
     echo
-    echo -e "${BLUE}Advanced Examples (hcxlabtool backend):${NC}"
-    echo "  # Whitelist a specific vendor by their OUI"
-    echo "  $SCRIPT_CMD -i wlan2 --backend hcxlabtool --oui-file cisco.txt --oui-filter-mode whitelist"
+    echo -e "${BLUE}Use Case 3: Targeted OUI Whitelisting with Time-Warp Attack${NC}"
+    echo "  # Focus only on Cisco devices and use the FTC attack to force transitions."
+    echo "  $SCRIPT_CMD -i wlan2 --backend hcxlabtool --oui-file cisco.txt --oui-filter-mode whitelist --time-warp-attack"
     echo
-    echo "  # Use the advanced Real-Time Display to see PMKID/EAPOL status"
+    echo -e "${BLUE}Use Case 4: Advanced Real-Time Display${NC}"
+    echo "  # Use the advanced Real-Time Display to see PMKID/EAPOL status."
     echo "  $SCRIPT_CMD -i wlan2 --backend hcxlabtool --rds 2"
     echo
-    echo
-    echo "  # Create a live survey log for advanced database analysis"
-    echo "  $SCRIPT_CMD -i wlan2 --live-db-log -d 600"
+    echo -e "${BLUE}Use Case 5: Passing Custom Options${NC}"
+    echo "  # Run a standard hunt but pass a custom option to hcxdumptool to disable beacons."
+    echo "  $SCRIPT_CMD -i wlan2 --hunt-handshakes --hcxd-opts \"--disable_beacon\""
     echo
 }
 
 usage() {
     local SCRIPT_CMD
     SCRIPT_CMD=$(basename "$0")
-    echo -e "${BLUE}Usage:${NC} $SCRIPT_CMD [OPTIONS]"
+    echo -e "${BLUE}Usage:${NC} $SCRIPT_CMD -i <interface> [OPTIONS]"
     echo
     echo -e "${GREEN}System & Management:${NC}"
-    echo "  --backend <tool>       Capture engine to use (hcxdumptool|hcxlabtool). Default: hcxdumptool"
+    echo "  -h, --help             Show this basic help screen."
+    echo "  --full-help            Show advanced help with examples."
+    echo "  -v, --version          Show script version."
     echo "  --install              Install script and all components."
     echo "  --uninstall            Remove the toolkit and all related files."
     echo "  --update               Check for and install updates to the toolkit."
     echo "  --optimize-performance Apply the high-performance wireless configuration."
     echo "  --restore-config       Restore the original wireless configuration."
+    echo "  --backend <tool>       Capture engine (hcxdumptool|hcxlabtool). Default: hcxdumptool."
+    echo "  --interactive          Start the script in an interactive setup wizard."
     echo "  --profile <name>       Load a configuration profile."
     echo "  --list-profiles        List available configuration profiles."
     echo "  --list-filters         List available BPF filter files."
-    echo "  -v, --version          Show script version."
-    echo "  -h, --help             Show this help screen."
+    echo
+    echo -e "${GREEN}Core Capture Options:${NC}"
+    echo "  -i, --interface <iface>  [REQUIRED] Specify the wireless interface for capture."
+    echo "  -c, --channels <ch>      Set specific channels to scan (e.g., '1,6,11'). Default: All."
+    echo "  -d, --duration <secs>    Set the total capture duration in seconds. (Default: unlimited)"
+    echo "  -o, --output-dir <path>  Directory to save capture files. Default: /root/hcxdumps."
+    echo "  --stay-time <ms>         Time in milliseconds to stay on each channel."
+    echo "  --enable-gps             Enable gpsd for logging location data to pcapng file."
     echo
     echo -e "${GREEN}Filtering Options (Mutually Exclusive):${NC}"
+    echo "  --bpf <file>             Path to a pre-compiled BPF filter file."
     echo "  --filter-file <file>     Path to a file with full MAC addresses."
     echo "  --filter-mode <mode>     Mode for --filter-file (whitelist|blacklist). Default: blacklist."
     echo "  --oui-file <file>        Path to a file with 3-byte OUIs (e.g., AA:BB:CC)."
     echo "  --oui-filter-mode <mode> Mode for --oui-file (whitelist|blacklist). Default: blacklist."
-    echo "  --bpf <file>             Path to a pre-compiled BPF filter file."
     echo
-    echo -e "${GREEN}Standard & Advanced Modes:${NC}"
-    echo "  --hunt-handshakes      Actively deauthenticate clients to capture handshakes (hcxdumptool)."
-    echo "  --client-only-hunt     Stealthily capture client handshakes without associating with an AP (hcxlabtool)."
-    echo "  --pmkid-priority-hunt  Focus exclusively on capturing PMKIDs from APs (hcxlabtool)."
-    echo "  --live-db-log          Enable live network data logging for advanced DB analysis (requires --backend hcxlabtool)."
+    echo -e "${GREEN}Attack & Capture Modes:${NC}"
+    echo "  --hunt-handshakes        Actively deauthenticate to capture handshakes (hcxdumptool)."
+    echo "  --passive                Run in a strictly passive mode, no deauthentication."
+    echo "  --survey                 Perform a network survey without saving capture files."
+    echo "  --client-only-hunt       Stealthily capture client handshakes without AP association (hcxlabtool)."
+    echo "  --pmkid-priority-hunt    Focus exclusively on capturing PMKIDs from APs (hcxlabtool)."
+    echo "  --time-warp-attack       Execute a Forced Transition Candidate (FTC) attack (hcxlabtool)."
+    echo "  --wardriving-loop <secs> Run in a continuous loop, creating a new file every N seconds."
+    echo "  --live-db-log            Enable live network data logging for advanced DB analysis (hcxlabtool)."
+    echo "  --rds <mode>             Set Real-Time Display mode (0=off, 1-3=modes) (hcxlabtool)."
+    echo
+    echo -e "${GREEN}Advanced Control:${NC}"
+    echo "  --hcxd-opts \"<opts>\"     Pass additional, quoted options directly to the backend tool."
     echo
     if [ "$FULL_HELP" -eq 1 ]; then
         show_full_help
