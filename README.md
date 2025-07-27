@@ -1,50 +1,51 @@
 # WiFi Pineapple HCX Toolkit 🍍
-### v7.0.0 - "Hydra"
+### v8.0.0 - "Leviathan"
 
-An advanced automation framework for `hcxdumptool`, `hcxlabtool`, and `hcxtools` on the WiFi Pineapple MKVII and other OpenWrt devices. This toolkit transforms the powerful `hcx` binaries into a streamlined, user-friendly, and highly effective system for WiFi security assessments.
+An advanced offensive and intelligence framework for `hcxdumptool`, `hcxlabtool`, and `hcxtools` on the WiFi Pineapple MKVII and other OpenWrt devices. This toolkit transforms the powerful `hcx` binaries into an automated, intelligent, and highly effective system for WiFi security assessments.
 
 ---
 
 ## Core Philosophy
 
-This toolkit was built to be a masterpiece of automation. It bridges the gap between the raw power of the HCX tools and the need for efficient, repeatable, and insightful analysis. It is designed for both novice users who need a guided experience and advanced users who require deep control and customization.
+This toolkit was built to be a masterpiece of automation. It bridges the gap between the raw power of the HCX tools and the need for efficient, repeatable, and insightful analysis. The "Leviathan" release evolves this philosophy, turning the toolkit into a proactive decision-support system that not only gathers data but tells you how to use it.
 
-## Major Features (v7.0.0 "Hydra" Update)
+## Major Features (v8.0.0 "Leviathan" Update)
 
-This toolkit is more than just a wrapper; it's a complete workflow engine.
+This toolkit is more than just a wrapper; it's a complete operational framework.
 
-### **Remote Execution Engine: Offload to a Powerhouse**
-* **Remote Analysis (`--remote-mode`)**: Offload intensive analysis tasks from the resource-constrained Pineapple to a powerful desktop PC. The script handles securely transferring files, executing the analysis remotely, and bringing the results back.
-* **Remote Database (`--remote-mode mysql`)**: Log all findings directly to a remote MySQL/MariaDB server for centralized data management.
-* **Remote Cracking (`--utility remote_crack`)**: Seamlessly send captured hashes to a remote machine with Hashcat for GPU-accelerated cracking.
+### 🧠 **Strategic Intelligence Engine**
+The toolkit no longer just shows you data; it provides actionable intelligence.
+* **`--mode recommend`**: Acts as a virtual strategist, analyzing captures to suggest the most effective, high-probability attack vectors to pursue next.
+* **`--mode trends`**: Performs historical analysis on your database to report on long-term environmental changes, new devices, and assets that have gone dark.
+* **`--utility find-reuse-targets`**: Automatically cross-references cracked passwords against all uncracked networks with the same name, identifying critical credential reuse vulnerabilities.
 
-### **Dual-Backend Attack System (--backend)**
-Choose the right engine for the job:
-* `hcxdumptool` **(Default)**: The classic, robust engine. Best for general-purpose, high-volume capture of handshakes and PMKIDs.
-* `hcxlabtool` **(Advanced)**: A surgical tool for specialized attacks. Use this for stealthy client-only attacks (`--client-only-hunt`), focusing exclusively on PMKIDs (`--pmkid-priority-hunt`), or advanced techniques like the Time-Warp attack.
+### ⚙️ **Full-Spectrum Automation**
+Execute complex workflows with a single command and receive results autonomously.
+* **`--post-job`**: A "fire-and-forget" chainable job queue. Automatically run any analysis command (like generating a dashboard) the moment a capture is complete.
+* **`--monitor`**: When cracking remotely, this flag turns the analyzer into a monitoring station that automatically fetches and displays newly cracked passwords as they are found.
+* **Push Notifications**: The analyzer can be configured to send C2-style callbacks via `ntfy` or `Discord` the instant a password is cracked, reporting its victories to you.
 
-### **System Performance Optimization Engine**
+### ⚔️ **Advanced Offensive Suite**
+Execute more precise, effective, and evasive attacks.
+* **`--hunt-adaptive`**: A surgical attack mode that performs reconnaissance to identify and target only active clients, maximizing handshake capture success while minimizing network noise.
+* **`--random-mac`**: Evade detection by randomizing the capture interface's MAC address before going active, automatically restoring it upon completion.
+* **Dual-Backend System (`--backend`)**: Seamlessly switch between the robust, high-volume capture of `hcxdumptool` and the specialized, surgical attacks of `hcxlabtool`.
+
+### 📊 **Situational Awareness & Reporting**
+Visualize the battlefield and generate professional reports with a single command.
+* **`--utility generate-dashboard`**: Fuses all collected intelligence—cracked credentials, network lists, PII, and GPS tracks—into a single, self-contained HTML dashboard perfect for briefings.
+* **`--utility geotrack`**: Converts GPS data from wardriving captures into a KML file for visualization in Google Earth.
+
+### ☁️ **Data Management & Offloading**
+Manage data across devices and overcome the Pineapple's storage limitations.
+* **`--utility cloud-sync`**: Integrates `rclone` to provide robust, two-way synchronization of captures and results with a configured cloud provider (Google Drive, Dropbox, etc.).
+* **`--tag`**: A full session management system. Tag captures with an operational identifier and use the same tag in the analyzer to focus only on data from a specific engagement.
+* **Remote Execution Engine**: Offload any intensive analysis task from the Pineapple to a powerful remote machine, which handles all processing and sends the results back.
+
+### 🚀 **System & Usability**
+Get set up and optimized faster than ever.
+* **`--utility setup-remote`**: An interactive wizard that fully automates the configuration of a remote analysis server, from SSH key exchange to dependency installation.
 * **`--optimize-performance`**: Applies a fine-tuned wireless configuration to the MKVII hardware, capable of boosting capture rates by over 450%.
-* **`--restore-config`**: Instantly reverts to your original, backed-up wireless configuration.
-
-### **The HCX Analyzer: Beyond Just Hashes**
-The completely overhauled `hcx-analyzer.sh` script is the heart of the toolkit, offering multiple analysis modes through an **interactive menu**:
-* **`--mode summary`**: Get a quick or deep overview of captured hashes, network names, and devices.
-* **`--mode intel`**: A powerful, automated intelligence gathering mode to report on device vendors and group hashes.
-* **`--mode vuln`**: A comprehensive vulnerability assessment that tests for thousands of known default router passwords.
-* **`--mode pii`**: Scans captures for Personally Identifiable Information (PII) like usernames and identities from enterprise networks.
-* **`--mode db`**: Logs all findings to a local SQLite database for persistent storage and querying.
-* **`--utility geotrack`**: Creates a KML map file from captures that contain GPS data.
-* **`--utility export`**: Converts your captures into other common formats like `.cap` and `.csv`.
-
-### **Advanced Filtering**
-* **Capture-Time Filtering**: Use `--filter-file` or `--oui-file` to whitelist or blacklist devices by full MAC address or vendor OUI before the capture even starts.
-* **Post-Capture Filtering**: The analyzer's `--utility filter_hashes` can filter a hash file by dozens of criteria, including ESSID length/regex, hash type, handshake authorization state, and more.
-
-### **Workflow & Customization**
-* `--wardriving-loop <seconds>`: Run captures in continuous, timed loops for mobile data collection.
-* `--profile <name>`: Load pre-defined sets of arguments from configuration files for specific, repeatable scenarios.
-* `--enable-gps`: Automatically use a connected `gpsd`-compatible device to embed coordinates directly into capture files.
 
 ---
 
@@ -54,7 +55,8 @@ The completely overhauled `hcx-analyzer.sh` script is the heart of the toolkit, 
 * **hcxtools-custom**: v6.2.7 (specifically)
 * **hcxlabtool** (Optional, for advanced backend): v7.0 or newer.
 * `git` and `opkg` for installation.
-* root access.
+* **Recommended for full functionality:** `rclone` (for cloud-sync) and `macchanger` (for random-mac).
+* Root access.
 
 ### Support This Project
 If you find this project helpful, please consider supporting its continued development:

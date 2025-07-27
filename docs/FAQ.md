@@ -7,43 +7,36 @@
 
 ## General Questions
 ### What is the WiFi Pineapple HCX Toolkit?
-The HCX Toolkit is a powerful wrapper script framework for the `hcx` tool suite that automates and simplifies WiFi security assessments on the WiFi Pineapple. It adds features like a remote execution engine, selectable attack backends, performance optimization, configuration profiles, and a full-featured analyzer.
+The HCX Toolkit is a powerful automation and intelligence framework for the `hcx` tool suite on the WiFi Pineapple. The v8.0.0 "Leviathan" release evolves it from a simple wrapper into a complete offensive and analysis platform, with features like a strategic recommendation engine, automated workflows, and advanced attack modes.
 
 ### What's the difference between this and the raw hcx tools?
 This toolkit adds a user-friendly and feature-rich layer. Key advantages include:
-* **Remote Execution**: Offload heavy analysis and cracking to a powerful desktop PC.
-* **Performance Optimization**: A one-command option to apply a high-gain wireless configuration.
-* **Dual Backends**: Choose between `hcxdumptool` for broad captures and `hcxlabtool` for surgical attacks.
-* **Workflow Automation**: Use simple flags like `--wardriving-loop` and `--hunt-handshakes` for complex tasks.
-* **Interactive Analyzer**: The companion `hcx-analyzer.sh` script runs interactively, guiding you through different analysis types locally or remotely.
-* **Advanced Filtering**: Filter captures by MAC/OUI in real-time or filter hash files by dozens of criteria post-capture.
+* **Strategic Intelligence**: The toolkit analyzes your data and tells you what to do next (`--mode recommend`).
+* **Full Automation**: Chain captures and analysis together (`--post-job`), get real-time cracking alerts (`--monitor` + Push Notifications), and sync to the cloud (`--utility cloud-sync`).
+* **Advanced Attacks**: Use surgical, targeted deauthentication (`--hunt-adaptive`) and evade detection with MAC randomization (`--random-mac`).
+* **Professional Reporting**: Generate a full HTML dashboard of all findings with one command (`--utility generate-dashboard`).
+* **Simplified Setup**: A wizard (`--utility setup-remote`) automates the entire configuration of a remote analysis server.
 
 ## Installation & Usage
+### Q: How do I use the new features like cloud sync or MAC randomization?
+A: These features depend on optional packages. `cloud-sync` requires `rclone`, and `random-mac` requires `macchanger`. Please see the `INSTALLATION.md` file for simple, one-line installation commands for these packages.
+
+### Q: How do I set up push notifications?
+A: Open the main configuration file at `/etc/hcxtools/hcxscript.conf`. In it, you'll find a section for `Push Notification Settings`. Set `NOTIFICATION_ENABLED=1`, choose your service (`ntfy` or `discord`), and paste in your webhook URL.
+
 ### Q: Where are the files installed?
 * **Main scripts**: `/usr/bin/hcxdumptool-launcher` and `/usr/bin/hcx-analyzer.sh`
-* **Configuration & Data**: The entire `/etc/hcxtools/` directory, which contains:
-    * `hcxscript.conf` (Main config, including remote server settings)
-    * `profiles/` (Capture profiles)
-    * `launcher.log` (Log file)
-    * `VERSION` (Toolkit version file)
-    * `wireless.optimized` (Template for the performance optimization)
+* **Configuration & Data**: The entire `/etc/hcxtools/` directory.
 * **Default Captures**: `/root/hcxdumps/`
 * **Default Analysis Dir**: `/root/hcx-analysis/`
+* **Local Database**: `/root/hcxdumps/database.db`
 * **Wireless Backup**: `/etc/config/wireless.hcx-backup` (Created after running `--optimize-performance`)
 
-### Q: What is the easiest way to start analyzing captures?
-A: Run the analyzer script without any arguments. It will present an interactive menu.
-```bash
-hcx-analyzer.sh
-```
-
-From this menu, you can choose local analysis modes (like ```summary``` or ```vuln```) or even offload the work by selecting a remote option. The script will automatically find your most recent capture files.  
-
 ## Technical Questions  
-**Q: What is remote analysis and why should I use it?**  
-A: The WiFi Pineapple has a limited CPU and RAM. Heavy tasks, like analyzing a large capture file with thousands of networks, can be very slow or even crash the device. Remote analysis solves this by sending the capture file to a more powerful computer to do the work and then brings back the results. It's much faster and more reliable for large data sets.  
+### Q: What is the difference between `--hunt-handshakes` and `--hunt-adaptive`?
+A: They are two different levels of active deauthentication.
+* `--hunt-handshakes` is a **broadcast** attack. It sends deauth frames to the entire network, forcing all connected clients to disconnect. It's noisy but effective.
+* `--hunt-adaptive` is a **surgical** attack. It first scans to see which clients are actively talking, then sends deauth frames *only* to those specific clients. It is much stealthier and more efficient.
 
-Q: What is the difference between --backend hcxdumptool and --backend hcxlabtool?  
-A: They are two different capture engines for different purposes.  
-* ```--backend hcxdumptool``` (the default) is the classic, all-around tool. It's great for capturing everything in an area (both PMKIDs from APs and handshakes from clients).
-* ```--backend hcxlabtool``` is a newer, more specialized tool. Use it when you want to perform a "surgical" attack, such as only collecting PMKIDs, or only targeting clients without interacting with access points.
+### Q: What is the Strategic Recommendation Engine?
+A: The `--mode recommend` feature is an AI-like advisor. It runs a quick analysis on your captures to check key metrics (like the ratio of PMKIDs to full handshakes, or the presence of enterprise usernames). Based on these findings, it prints a prioritized list of suggested next steps to help you focus your efforts where they're most likely to succeed.
