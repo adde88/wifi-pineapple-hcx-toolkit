@@ -9,7 +9,7 @@
 #==============================================================================
 
 # --- Script Version ---
-ANALYZER_VERSION="7.1.0 \"Hydra-Intel\""
+ANALYZER_VERSION="8.0.0 \"Leviathan\""
 
 # --- System & Path Configuration ---
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then

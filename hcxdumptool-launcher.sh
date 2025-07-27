@@ -27,7 +27,7 @@ readonly WIRELESS_CONFIG_BACKUP="/etc/config/wireless.hcx-backup"
 if [ -f "$VERSION_FILE" ]; then
     SCRIPT_VERSION=$(cat "$VERSION_FILE")
 else
-    SCRIPT_VERSION="7.1.0" # Fallback for standalone execution
+    SCRIPT_VERSION="8.0.0" # Fallback for standalone execution
 fi
 
 # NEW: Sanity check to ensure the version file isn't corrupt.
