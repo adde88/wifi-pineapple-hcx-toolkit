@@ -1,10 +1,13 @@
 # Installation Guide
 
-This guide provides step-by-step instructions for installing the WiFi Pineapple HCX Toolkit v7.0.0.
+This guide provides step-by-step instructions for installing the WiFi Pineapple HCX Toolkit v8.0.0 "Leviathan".
 
 ## Prerequisites
 
-Before installing, please ensure your system meets the following requirements:
+Before installing, please ensure your system meets the following requirements.
+
+### **Core Packages**
+These are required for the toolkit to function.
 
 * A WiFi Pineapple MKVII or other OpenWrt-based device.
 * **hcxdumptool-custom**: v21.02.0 or newer installed via `opkg`.
@@ -12,6 +15,19 @@ Before installing, please ensure your system meets the following requirements:
 * **hcxlabtool** (Optional): v7.0 or newer for the advanced attack backend.
 * **git**: The `git` package must be installed (`opkg update && opkg install git`).
 * Root access to the device.
+
+### **Recommended Optional Packages**
+These packages enable some of the new, advanced features.
+
+* **macchanger**: Required for the `--random-mac` evasion feature.
+    ```bash
+    opkg install macchanger
+    ```
+* **rclone**: Required for the `--utility cloud-sync` feature.
+    ```bash
+    opkg install rclone
+    ```
+    After installing, you must configure `rclone` by running `rclone config` and following the setup wizard.
 
 ## Installation Steps
 
@@ -33,7 +49,7 @@ Before installing, please ensure your system meets the following requirements:
     ```bash
     hcxdumptool-launcher --version
     ```
-    This should display `v7.0.0` or newer. The toolkit is now installed and ready to use.
+    This should display `v8.0.0` or newer. The toolkit is now installed and ready to use.
 
 ## Post-Installation: Performance Tuning (Recommended)
 
