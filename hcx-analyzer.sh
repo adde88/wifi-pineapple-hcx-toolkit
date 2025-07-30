@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# HCX Advanced Analyzer - v7.0.0 "Hydra"
+# HCX Advanced Analyzer - v8.0.6 "Leviathan"
 #
 # (C) 2025 Andreas Nilsen. All rights reserved.
 
@@ -9,7 +9,7 @@
 #==============================================================================
 
 # --- Script Version ---
-ANALYZER_VERSION="8.0.0 \"Leviathan\""
+ANALYZER_VERSION="8.0.6 \"Leviathan\""
 
 # --- System & Path Configuration ---
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then
@@ -168,18 +168,55 @@ sanitize_arg() {
 
 run_with_spinner() {
     local message="$1"; local cmd="$2"; shift 2; local args="$@"
-    printf "%s" "$message"
-    spinner() {
-        local spinstr='|/-\\'
-        while true; do local temp=${spinstr#?}; printf " [%c] " "$spinstr"; spinstr=$temp${spinstr%"$temp"}; sleep 0.1; printf "\b\b\b\b\b"; done
-    }
-    spinner &
+    printf "%s: " "$message"
+    
+    # Use a temporary file as a flag to control the spinner's loop. This is more reliable than using kill.
+    local flag_file="/tmp/spinner_flag_$$"
+    touch "$flag_file"
+
+    # The spinner runs in a subshell and loops as long as the flag file exists.
+    (
+        while [ -f "$flag_file" ]; do
+            # POSIX-compliant spinner animation logic
+            local spinstr='|/-\'
+            local temp=${spinstr#?}
+            printf " [%c] " "$spinstr"
+            spinstr=$temp${spinstr%"$temp"}
+            sleep 0.1
+            printf "\b\b\b\b\b"
+        done
+    ) &
     local spinner_pid=$!
-    trap "kill $spinner_pid 2>/dev/null; printf '\b\b\b\b\b     \b\b\b\b\b'; exit" INT TERM EXIT
-    if [ "$VERBOSE" -eq 1 ]; then printf "\n"; eval "$cmd $args"; else eval "$cmd $args" >/dev/null 2>&1; fi
+
+    # The trap now just cleans up the flag file on interrupt, causing the spinner to exit.
+    trap "rm -f '$flag_file' 2>/dev/null; kill $spinner_pid 2>/dev/null; printf '\n'; exit 130" INT TERM
+
+    # Execute the primary command.
+    if [ "$VERBOSE" -eq 1 ]; then
+        printf "\n"
+        eval "$cmd $args"
+    else
+        eval "$cmd $args" >/dev/null 2>&1
+    fi
     local exit_code=$?
-    kill $spinner_pid 2>/dev/null; printf "\b\b\b\b\b     \b\b\b\b\b"; trap - INT TERM EXIT
-    if [ $exit_code -eq 0 ]; then printf "${GREEN}Done.${NC}\n"; else printf "${RED}Failed.${NC}\n"; fi
+
+    # Signal the spinner to stop by removing the flag file.
+    rm -f "$flag_file" 2>/dev/null
+    
+    # Wait for the spinner process to see the flag is gone and exit gracefully.
+    wait $spinner_pid 2>/dev/null
+
+    # Clear the trap.
+    trap - INT TERM
+
+    # Final cleanup of the visual spinner from the command line.
+    printf "\b\b\b\b\b     \b\b\b\b\b"
+
+    if [ $exit_code -eq 0 ]; then
+        printf "${GREEN}Done.${NC}\n"
+    else
+        printf "${RED}Failed.${NC}\n"
+    fi
     return $exit_code
 }
 
@@ -339,26 +376,54 @@ run_summary() {
     if [ -z "$files_to_process" ]; then files_to_process=$(find "$ANALYSIS_DIR" -name "*.pcapng"); fi
     if [ -z "$files_to_process" ]; then printf "%b\n" "${RED}No .pcapng files found to process.${NC}"; return 1; fi
     
-    run_with_spinner "Processing files..." "hcxpcapngtool" $files_to_process -o "$ANALYSIS_DIR/all_hashes.hc22000" -E "/tmp/analyzer_essids.tmp" -D "/tmp/analyzer_devices.tmp"
-    local ALL_HASHES_FILE="$ANALYSIS_DIR/all_hashes.hc22000"; local TEMP_ESSID_FILE="/tmp/analyzer_essids.tmp"; local TEMP_DEVICE_FILE="/tmp/analyzer_devices.tmp"
+    # Use temporary files for session-specific analysis to prevent data contamination.
+    local SESSION_HASHES_FILE="/tmp/analyzer_session_hashes_$$.hc22000"
+    local TEMP_ESSID_FILE="/tmp/analyzer_essids_$$.tmp"
+    local TEMP_DEVICE_FILE="/tmp/analyzer_devices_$$.tmp"
+    
+    run_with_spinner "Processing files for session summary" "hcxpcapngtool" $files_to_process -o "$SESSION_HASHES_FILE" -E "$TEMP_ESSID_FILE" -D "$TEMP_DEVICE_FILE"
+    
     local TOTAL_HASHES=0; local PMKID_COUNT=0; local EAPOL_COUNT=0; local ESSID_COUNT=0; local DEVICE_COUNT=0
-    if [ -s "$ALL_HASHES_FILE" ]; then
+    
+    if [ -s "$SESSION_HASHES_FILE" ]; then
+        TOTAL_HASHES=$(wc -l < "$SESSION_HASHES_FILE")
         if [ "$SUMMARY_MODE" = "deep" ]; then
-            TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE"); PMKID_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=1 2>/dev/null | wc -l); EAPOL_COUNT=$(hcxhashtool -i "$ALL_HASHES_FILE" --type=2 2>/dev/null | wc -l)
+            PMKID_COUNT=$(hcxhashtool -i "$SESSION_HASHES_FILE" --type=1 2>/dev/null | wc -l)
+            EAPOL_COUNT=$(hcxhashtool -i "$SESSION_HASHES_FILE" --type=2 2>/dev/null | wc -l)
         else
-            TOTAL_HASHES=$(wc -l < "$ALL_HASHES_FILE"); PMKID_COUNT="N/A (Quick Mode)"; EAPOL_COUNT="N/A (Quick Mode)"
+            PMKID_COUNT="N/A (Quick Mode)"
+            EAPOL_COUNT="N/A (Quick Mode)"
         fi
     fi
     if [ -s "$TEMP_ESSID_FILE" ]; then ESSID_COUNT=$(sort -u "$TEMP_ESSID_FILE" | wc -l); fi
     if [ -s "$TEMP_DEVICE_FILE" ]; then DEVICE_COUNT=$(sort -u "$TEMP_DEVICE_FILE" | wc -l); fi
-    printf "\n%b\n" "${BLUE}--- Overall Summary ---${NC}"
-    printf "%b\n" "[*] Total Crackable Hashes:         ${GREEN}$TOTAL_HASHES${NC}"
+
+    # --- Print Session Summary ---
+    printf "\n%b\n" "${BLUE}--- Session Summary ---${NC}"
+    printf "%b\n" "[*] Total Crackable Hashes in Selection: ${GREEN}$TOTAL_HASHES${NC}"
     if [ "$SUMMARY_MODE" = "deep" ]; then
-        printf "%b\n" "    - PMKIDs (AP-based):            ${YELLOW}$PMKID_COUNT${NC}"; printf "%b\n" "    - Handshakes (Client-based):    ${YELLOW}$EAPOL_COUNT${NC}"
+        printf "%b\n" "    - PMKIDs (AP-based):            ${YELLOW}$PMKID_COUNT${NC}"
+        printf "%b\n" "    - Handshakes (Client-based):    ${YELLOW}$EAPOL_COUNT${NC}"
     fi
-    printf "%b\n" "[*] Total Unique ESSIDs (Networks): ${GREEN}$ESSID_COUNT${NC}"; printf "%b\n" "[*] Total Unique Devices (MACs):    ${GREEN}$DEVICE_COUNT${NC}"
-    if [ ! -s "$ALL_HASHES_FILE" ]; then rm -f "$ALL_HASHES_FILE"; fi
-    rm -f "$TEMP_ESSID_FILE" "$TEMP_DEVICE_FILE" 2>/dev/null
+    printf "%b\n" "[*] Unique ESSIDs (Networks) in Selection: ${GREEN}$ESSID_COUNT${NC}"
+    printf "%b\n" "[*] Unique Devices (MACs) in Selection:  ${GREEN}$DEVICE_COUNT${NC}"
+
+    # --- Print Historical Summary from Database ---
+    if [ -f "$DB_FILE" ] && command -v sqlite3 >/dev/null 2>&1; then
+        local hist_hashes; hist_hashes=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM hashes;")
+        local hist_cracked; hist_cracked=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM hashes WHERE psk IS NOT NULL;")
+        local hist_networks; hist_networks=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM networks;")
+        local hist_clients; hist_clients=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM clients;")
+        
+        printf "\n%b\n" "${BLUE}--- Historical Totals (from Database) ---${NC}"
+        printf "%b\n" "[*] Total Hashes Ever Recorded:       ${GREEN}$hist_hashes${NC}"
+        printf "%b\n" "[*] Total Passwords Cracked So Far:   ${GREEN}$hist_cracked${NC}"
+        printf "%b\n" "[*] Total Unique Networks Seen:     ${GREEN}$hist_networks${NC}"
+        printf "%b\n" "[*] Total Unique Devices Seen:      ${GREEN}$hist_clients${NC}"
+    fi
+    
+    # Clean up all temporary files used by this function.
+    rm -f "$SESSION_HASHES_FILE" "$TEMP_ESSID_FILE" "$TEMP_DEVICE_FILE" 2>/dev/null
 }
 
 run_intel() {

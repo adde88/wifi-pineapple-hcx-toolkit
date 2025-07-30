@@ -1,68 +1,113 @@
-# Advanced Usage Guide (v8.0.0 "Leviathan")
+# Advanced Usage Guide (v7.0.0)
 
-This guide covers advanced techniques and workflows for power users of the WiFi Pineapple HCX Toolkit.
+This guide covers advanced techniques for power users of the WiFi Pineapple HCX Toolkit.
 
-## 1. Strategic Intelligence Engine
-The "Leviathan" release introduces several modes that provide actionable intelligence, not just raw data. These modes require a populated database (`--mode db`).
+## 1. Remote Execution Engine
 
-* **`--mode recommend`**: The most powerful new feature. The script analyzes your captures and provides a prioritized list of suggested next steps.
-    ```bash
-    # Get strategic advice on how to proceed with your latest captures
-    hcx-analyzer.sh --mode recommend /root/hcxdumps/
-    ```
-* **`--mode trends`**: Analyze how the wireless environment changes over time.
-    ```bash
-    # See what new devices have appeared and which have gone stale
-    hcx-analyzer.sh --mode trends
-    ```
-* **`--utility find-reuse-targets`**: Scan for the critical vulnerability of password reuse.
-    ```bash
-    # Get a report of uncracked networks that may use a password you already know
-    hcx-analyzer.sh --utility find-reuse-targets
-    ```
+The flagship feature of v7.0.0 is the ability to offload intensive work to a more powerful machine. This avoids memory/CPU bottlenecks on the Pineapple and enables workflows that were previously impossible.
 
-## 2. Full-Spectrum Automation
-Automate your entire workflow from capture to notification.
+**Configuration**: All remote settings are managed in `/etc/hcxtools/hcxscript.conf`. You must configure your remote host IP, user, and paths here first. Passwordless SSH key authentication is required.
 
-* **Chainable Job Queue (`--post-job`)**: Automatically run an analysis task after a capture finishes. This is the ultimate "fire-and-forget" feature.
-    ```bash
-    # Run a 10-minute tagged capture, then automatically generate an HTML dashboard for it
-    hcxdumptool-launcher.sh -i wlan2 -d 600 --tag "CorpLobby" --post-job "--utility generate-dashboard"
-    ```
-* **Remote Crack Monitoring (`--monitor`)**: Get real-time feedback from a remote `hashcat` session.
-    ```bash
-    # Start a remote crack job and have the script automatically report new finds
-    hcx-analyzer.sh --utility remote_crack --monitor all_hashes.hc22000
-    ```
-* **Push Notifications**: Configure `hcxscript.conf` with a `ntfy` or `Discord` webhook. The `--monitor` feature will then send push notifications to your phone or desktop the instant a password is cracked.
+### Remote Analysis & Utilities
+Almost any analysis task can be offloaded. The script handles the secure transfer of files, remote execution, and retrieval of results.
 
-## 3. Advanced Offensive Suite
-Execute more precise and evasive attacks.
+```bash
+# Analyze a local capture file on the remote server and get the results back
+hcx-analyzer.sh --remote-mode summary /root/hcxdumps/capture.pcapng
 
-* **Adaptive Deauthentication (`--hunt-adaptive`)**: A surgical attack that first performs reconnaissance to find active clients, then deauthenticates only those specific clients. It's more effective and stealthier than a broadcast attack.
-    ```bash
-    # Launch the interactive adaptive hunt wizard
-    hcxdumptool-launcher.sh -i wlan2 --hunt-adaptive
-    ```
-* **MAC Address Randomization (`--random-mac`)**: Increase your anonymity during an engagement.
-    ```bash
-    # Run an adaptive hunt using a randomized MAC address
-    hcxdumptool-launcher.sh -i wlan2 --hunt-adaptive --random-mac
-    ```
+# Filter a hash file on the remote server and get the filtered file back
+hcx-analyzer.sh --remote-utility filter_hashes --essid-regex "Guest.*" all_hashes.hc22000  
 
-## 4. Data Management (Tagging & Cloud Sync)
-Organize your data and overcome the Pineapple's storage limitations.
+**Remote Cracking & Database Logging**
+* ```--utility remote_crack```: Offloads a hash file to a remote Hashcat server for cracking.  
+* ```--remote-mode mysql```: Logs analysis results directly to a remote MySQL database.
 
-* **Session Tagging (`--tag`)**: The core of data management. Apply a tag at capture time, then use the same tag during analysis to focus only on the relevant data.
-    ```bash
-    # Step 1: Capture data for a specific engagement
-    hcxdumptool-launcher.sh -i wlan2 -d 300 --tag "Cafe-MainSt"
-    
-    # Step 2: Later, analyze only the data from that session
-    hcx-analyzer.sh --mode summary --tag "Cafe-MainSt"
-    ```
-* **Cloud Sync (`--utility cloud-sync`)**: Use `rclone` to sync your captures and results with a cloud provider. This is essential for long-term data storage and offsite analysis.
-    ```bash
-    # After configuring rclone, upload new captures and download new results
-    hcx-analyzer.sh --utility cloud-sync
-    ```
+## 2. Performance Optimization Engine  
+Version 7.0.0 introduces a feature to dramatically boost capture performance by applying a wireless configuration fine-tuned for the WiFi Pineapple MKVII hardware, potentially increasing capture rates by over 450%.  
+
+**WARNING**: This is an advanced feature that replaces your system's ```/etc/config/wireless``` file. The toolkit creates a backup, but you should understand the risks.  
+
+**Activating Performance Mode**
+To apply the optimized settings:
+```bash
+hcxdumptool-launcher --optimize-performance
+```  
+
+The script will copy the template into place and display the following critical warning. You must follow these steps precisely.
+
+############################################################################
+ACTION REQUIRED: MANUAL CONFIGURATION AND REBOOT NEEDED!
+############################################################################
+The high-performance wireless configuration has been copied into place.
+1. !! IMMEDIATE SECURITY RISK !!
+The new configuration has a DEFAULT PASSWORD for the 'MK7-ADMIN' network.
+You MUST change this password now.
+
+EDIT THE FILE: /etc/config/wireless
+
+FIND THE LINE: option key 'SETYOURADMINPASSWORDHERE'
+
+CHANGE THE PASSWORD to a secure one.
+
+2. !! APPLY CHANGES & REBOOT !!
+To ensure these deep hardware changes are applied correctly, you must
+commit the changes and then REBOOT your device.
+
+Run these two commands now:
+uci commit wireless
+reboot
+
+To revert these changes at any time, run:
+hcxdumptool-launcher --restore-config
+############################################################################
+
+**Restoring Your Original Configuration**
+To revert to your original settings at any time:  
+```bash
+hcxdumptool-launcher --restore-config
+```  
+
+## 3. Dual-Backend Attack System (--backend)  
+You can now choose the capture engine best suited for your goal.  
+```hcxdumptool``` (Default): The classic engine. A powerful, all-purpose tool for high-volume capture of both handshakes and PMKIDs.  
+```hcxlabtool``` (Advanced): A surgical tool for specialized attacks. Use this when you need stealth or a very specific target type.  
+```bash
+# Use the advanced backend for a stealthy client-only attack
+hcxdumptool-launcher --backend hcxlabtool --client-only-hunt -i wlan2
+```
+
+## 4. Specialized Attack Modes (hcxlabtool backend)  
+These modes require using ```--backend hcxlabtool```.
+
+* ```--client-only-hunt```: Stealthily captures client handshakes without ever associating with an AP. Excellent for passive, targeted collection.  
+* ```--pmkid-priority-hunt```: Focuses exclusively on capturing PMKIDs from roaming-capable APs, ignoring client handshakes.  
+* ```--time-warp-attack```: An advanced attack that sends future-dated beacon frames (--ftc), useful for specific security assessments.  
+
+## 5. Advanced Filtering
+**Capture-Time Filtering (Launcher)**  
+Filter devices during capture to reduce noise. These flags generate a BPF filter on the fly.  
+```bash
+# Blacklist your own devices to avoid capturing them
+hcxdumptool-launcher -i wlan2 --filter-file my_devices.txt --filter-mode blacklist
+
+# Whitelist and target only a specific vendor's devices
+hcxdumptool-launcher -i wlan2 --backend hcxlabtool --oui-file cisco_ouis.txt --oui-filter-mode whitelist
+```
+
+**Post-Capture Filtering (Analyzer)**
+The analyzer provides powerful hash filtering capabilities.  
+```bash
+# Create a new hash file containing only authorized EAPOL handshakes for ESSIDs matching a regex
+hcx-analyzer.sh --utility filter_hashes -o authorized_nets.hc22000 --type 2 --authorized --essid-regex "^HOME-" all_hashes.hc22000
+```
+
+## 6. Wardriving and Geotracking
+* ```--wardriving-loop <seconds>```: Runs captures in continuous, timed loops, creating a new file for each loop. Perfect for mobile data collection.  
+* ```--enable-gps```: When a gpsd-compatible device is connected, this embeds GPS data directly into the .pcapng file.  
+* ```--utility geotrack```: After a wardriving session, use the analyzer to convert the GPS data from your captures into a KML map file.  
+```bash
+# Process all captures from the default directory to create a map
+hcx-analyzer.sh --utility geotrack /root/hcxdumps/
+```
+
+

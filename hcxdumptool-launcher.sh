@@ -1,8 +1,9 @@
 #!/bin/sh
 #
-# v8.0.4 "Helios" (Corrected Unified Backend)
+# v8.0.6 "Leviathan"
 # Author: Andreas Nilsen
 # Github: https://www.github.com/ZerBea/hcxtools
+# Patched by Gemini for POSIX compliance and cleanup-analysis functionality.
 #
 # This script is designed to work with the custom packages from:
 # https://github.com/adde88/openwrt-useful-tools
@@ -31,11 +32,11 @@ readonly HCXDUMPTOOL_BIN="/usr/sbin/hcxdumptool"
 if [ -f "$VERSION_FILE" ]; then
     SCRIPT_VERSION=$(cat "$VERSION_FILE")
 else
-    SCRIPT_VERSION="8.0.4" # Fallback for standalone execution
+    SCRIPT_VERSION="8.0.6"
 fi
 
 #--- Tool Requirements ---#
-readonly REQ_HCXDUMPTOOL_VER_STR="v21.02.0" # Target the merged tool
+readonly REQ_HCXDUMPTOOL_VER_STR="v21.02.0"
 readonly REQ_HCXTOOLS_VER_STR="6.2.7"
 
 #--- Color Codes ---#
@@ -43,22 +44,36 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m';
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 #--- Default Settings ---#
-HCXD_OPTS="" # All special modes will add their flags here
+HCXD_OPTS=""
 OUTPUT_DIR="/root/hcxdumps"
 INTERFACE=""
 CHANNELS=""
 DURATION=""
 STAY_TIME=""
+BPF_FILE=""
+FILTER_FILE=""          
+FILTER_MODE="blacklist" 
+OUI_FILE=""             
+OUI_FILTER_MODE="blacklist"
 INTERACTIVE_MODE=0
 ENABLE_GPS=0
 WARDRIVING_LOOP=0
-TIME_WARP_ATTACK=0
 ADAPTIVE_HUNT=0
 PASSIVE_MODE=0
 SURVEY_MODE=0
+SURVEY_SCAN_MODE="a" # 'a' for active, 'p' for passive
+ACK_FRAMES=0
+TIMEOUT=""
+WATCHDOG_MAX=""
+ERROR_MAX=""
+EXIT_ON_EAPOL=""
+ASSOCIATION_MAX=""
+M2_MAX=""
+RESTORE_INTERFACE=1
 HCX_PID=0
 TEMP_FILE="/tmp/hcx_session_files_$$"
 START_TIME=0
+LAST_CAPTURE_FILE=""
 
 #==============================================================================
 # HELPER FUNCTIONS
@@ -78,7 +93,7 @@ show_banner() {
     printf " ( )_( )( ___)( )/ )( ___)(  _ \\(  )(  )( )_( )\n"
     printf "  ) _ (  )__)  )  (  )__)  )   / )(__)(  \\   / \n"
     printf " (_) (_)(____)(_)\\_)(____)(_)\\_)(______)(_)\\_)\n"
-    printf "${CYAN}             WiFi Pineapple HCX Toolkit v%s${NC}\n" "$SCRIPT_VERSION"
+    printf "${CYAN}             WiFi Pineapple HCX Toolkit v%s \"Hydra-Intel\"${NC}\n" "$SCRIPT_VERSION"
     printf "${RED}    LEGAL WARNING: For Authorized Security Personnel ONLY!${NC}\n\n"
 }
 
@@ -94,22 +109,34 @@ usage() {
     printf "  --restore-config         Restore the original wireless configuration.\n"
     printf "  --interactive            Start the script in an interactive setup wizard.\n"
     printf "  --profile <name>         Load a configuration profile.\n\n"
+    
     printf "${GREEN}Core Capture Options:${NC}\n"
     printf "  -i, --interface <iface>  [REQUIRED] Specify the wireless interface for capture.\n"
     printf "  -c, --channels <ch>      Set specific channels to scan (e.g., '1a,6a,11a'). Default: All.\n"
     printf "  -F                       Use all available channels from the interface.\n"
-    printf "  -t, --stay-time <secs>   Time in seconds to stay on each channel.\n"
+    printf "  -t, --stay-time <secs>   Set minimum time in seconds to stay on each channel (--t).\n"
     printf "  -d, --duration <secs>    Set the total capture duration in seconds.\n"
-    printf "  --enable-gps             Enable gpsd for logging location data.\n\n"
+    printf "  --enable-gps             Enable gpsd for logging location data (--gpsd).\n\n"
+
     printf "${GREEN}Attack & Capture Modes (all use hcxdumptool):${NC}\n"
     printf "  --hunt-adaptive          Run a smart hunt that targets a specific AP.\n"
-    printf "  --passive                Run in a strictly passive mode (no transmissions).\n"
-    printf "  --survey                 Perform a network survey without saving captures.\n"
-    printf "  --client-only-hunt       Stealthily capture client handshakes (--associationmax=0).\n"
-    printf "  --pmkid-priority-hunt    Focus on capturing PMKIDs (--m2max=0).\n"
+    printf "  --passive                Run in strictly passive mode (sends no deauth/disassoc frames).\n"
+    printf "  --survey [a|p]           Perform a network survey (a=active, p=passive). Default: active.\n"
+    printf "  --client-only-hunt       Stealthily capture client handshakes (sets --associationmax=0).\n"
+    printf "  --pmkid-priority-hunt    Focus on capturing PMKIDs (sets --m2max=0).\n"
     printf "  --time-warp-attack       Execute a Forced Transition Candidate (FTC) attack (--ftc).\n"
-    printf "  --rds <mode>             Set Real-Time Display mode (1-3).\n"
     printf "  --wardriving-loop <secs> Run in a continuous loop, creating a new file every N seconds.\n\n"
+    
+    printf "${GREEN}Fine-Tuning & Automation:${NC}\n"
+    printf "  --ack-frames             Acknowledge incoming frames (-A). Requires active monitor mode.\n"
+    printf "  --rds <mode>             Set Real-Time Display mode (0-3).\n"
+    printf "  --timeout <mins>         Set a total session timeout in minutes (--tot).\n"
+    printf "  --watchdog-max <secs>    Set watchdog timeout for no packets received (--watchdogmax).\n"
+    printf "  --error-max <count>      Set maximum allowed errors before exit (--errormax).\n"
+    printf "  --exit-on-eapol <bm>     Exit after capturing a specific EAPOL frame (bitmask).\n"
+    printf "  --association-max <num>  Set max association attempts (--associationmax).\n"
+    printf "  --m2-max <num>           Set max M1M2ROGUE frames to receive (--m2max).\n\n"
+
     printf "${GREEN}Advanced & Other Options:${NC}\n"
     printf "  -h, --help               Show this help screen.\n"
     printf "  -v, --version            Show script version.\n"
@@ -119,7 +146,6 @@ usage() {
 install_script() {
     printf "%b\n" "${BLUE}=== Installing HCX Toolkit v8.0.5 ===${NC}"
     
-    # Verify core tools are available before installing
     if ! command -v "$HCXDUMPTOOL_BIN" >/dev/null 2>&1; then printf "%b\n" "${RED}Required 'hcxdumptool' not found at %s. Aborting.${NC}" "$HCXDUMPTOOL_BIN"; exit 1; fi
     if ! command -v hcxpcapngtool >/dev/null 2>&1; then printf "%b\n" "${RED}Core 'hcxtools' not found. Aborting.${NC}"; exit 1; fi
 
@@ -129,7 +155,6 @@ install_script() {
     printf "Installing launcher to %s...\n" "$INSTALL_BIN"
     cp "$0" "$INSTALL_BIN" && chmod +x "$INSTALL_BIN"
 
-    # Silently try to copy the analyzer if it exists in the same directory
     if [ -f "$(dirname "$0")/hcx-analyzer.sh" ]; then
         printf "Installing analyzer to %s...\n" "$ANALYZER_BIN"
         cp "$(dirname "$0")/hcx-analyzer.sh" "$ANALYZER_BIN" && chmod +x "$ANALYZER_BIN"
@@ -234,7 +259,6 @@ optimize_performance() {
     cp /etc/config/wireless "$WIRELESS_CONFIG_BACKUP"
 
     printf "Writing optimized configuration...\n"
-    # This here-document writes the multi-line configuration to the file.
     cat > "$WIRELESS_CONFIG_OPTIMIZED" << 'EOF'
 config wifi-device 'radio0'
         option type 'mac80211'
@@ -316,9 +340,103 @@ load_profile() {
     fi
 
     printf "${CYAN}Loading profile: %s${NC}\n" "$profile_name"
-    # The '.' command is the POSIX-compliant way to source a file.
-    # It executes the commands from the file in the current shell context.
     . "$profile_path"
+}
+
+generate_bpf_from_mac_list() {
+    if [ -z "$FILTER_FILE" ]; then return; fi
+    if [ ! -f "$FILTER_FILE" ]; then
+        printf "${RED}Error: Filter file not found at '%s'${NC}\n" "$FILTER_FILE" >&2
+        exit 1
+    fi
+
+    printf "${CYAN}Generating BPF from MAC list: %s (Mode: %s)${NC}\n" "$FILTER_FILE" "$FILTER_MODE"
+
+    local bpf_string=""
+    local mac_list
+    mac_list=$(grep -v '^[[:space:]]*#' "$FILTER_FILE" | grep -v '^[[:space:]]*$')
+
+    if [ -z "$mac_list" ]; then
+        printf "${YELLOW}Warning: Filter file is empty. Ignoring.${NC}\n"
+        return
+    fi
+
+    while IFS= read -r mac; do
+        mac_clean=$(echo "$mac" | tr -d ':-[:space:]')
+        if [ -z "$bpf_string" ]; then
+            bpf_string="wlan addr2 $mac_clean"
+        else
+            bpf_string="$bpf_string or wlan addr2 $mac_clean"
+        fi
+    done <<EOF
+$mac_list
+EOF
+
+    if [ "$FILTER_MODE" = "blacklist" ]; then
+        bpf_string="not ($bpf_string)"
+    fi
+
+    local temp_bpf_file="/tmp/hcx_mac_filter_$$.bpf"
+    if hcxdumptool --bpfc="$bpf_string" > "$temp_bpf_file"; then
+        BPF_FILE="$temp_bpf_file"
+        printf "Successfully created temporary BPF filter.\n"
+    else
+        printf "${RED}Error: Failed to compile BPF from MAC list.${NC}\n" >&2
+        exit 1
+    fi
+}
+
+generate_bpf_from_oui_list() {
+    if [ -z "$OUI_FILE" ]; then return; fi
+    if [ ! -f "$OUI_FILE" ]; then
+        printf "${RED}Error: OUI file not found at '%s'${NC}\n" "$OUI_FILE" >&2
+        exit 1
+    fi
+
+    printf "${CYAN}Generating BPF from OUI list: %s (Mode: %s)${NC}\n" "$OUI_FILE" "$OUI_FILTER_MODE"
+
+    local bpf_string=""
+    local oui_list
+    oui_list=$(grep -v '^[[:space:]]*#' "$OUI_FILE" | grep -v '^[[:space:]]*$')
+
+    if [ -z "$oui_list" ]; then
+        printf "${YELLOW}Warning: OUI file is empty. Ignoring.${NC}\n"
+        return
+    fi
+
+    while IFS= read -r oui; do
+        local octet1
+        octet1=$(echo "$oui" | cut -d: -f1 | tr 'a-f' 'A-F')
+        local octet2
+        octet2=$(echo "$oui" | cut -d: -f2 | tr 'a-f' 'A-F')
+        local octet3
+        octet3=$(echo "$oui" | cut -d: -f3 | tr 'a-f' 'A-F')
+
+        local oui_filter_part="(wlan[10] = 0x$octet1 and wlan[11] = 0x$octet2 and wlan[12] = 0x$octet3)"
+
+        if [ -z "$bpf_string" ]; then
+            bpf_string="$oui_filter_part"
+        else
+            bpf_string="$bpf_string or $oui_filter_part"
+        fi
+    done <<EOF
+$oui_list
+EOF
+
+    bpf_string="wlan addr2 and ($bpf_string)"
+
+    if [ "$OUI_FILTER_MODE" = "blacklist" ]; then
+        bpf_string="not ($bpf_string)"
+    fi
+
+    local temp_bpf_file="/tmp/hcx_oui_filter_$$.bpf"
+    if hcxdumptool --bpfc="$bpf_string" > "$temp_bpf_file"; then
+        BPF_FILE="$temp_bpf_file"
+        printf "Successfully created temporary OUI BPF filter.\n"
+    else
+        printf "${RED}Error: Failed to compile BPF from OUI list.${NC}\n" >&2
+        exit 1
+    fi
 }
 
 dependency_check() {
@@ -326,21 +444,27 @@ dependency_check() {
     local error=0
 
     if ! command -v hcxpcapngtool >/dev/null 2>&1 || ! hcxpcapngtool -v 2>/dev/null | grep -q "$REQ_HCXTOOLS_VER_STR"; then
-        printf "${RED}Error: hcxtools-custom v%s or newer is required.${NC}\n" "$REQ_HCXTOOLS_VER_STR"
+        printf "%b\n" "${RED}Error: hcxtools-custom v$REQ_HCXTOOLS_VER_STR or newer is required.${NC}"
         error=1
     fi
 
     if ! command -v "$HCXDUMPTOOL_BIN" >/dev/null 2>&1; then
-        printf "${RED}Error: hcxdumptool not found at %s${NC}\n" "$HCXDUMPTOOL_BIN"
-        error=1
-    elif ! "$HCXDUMPTOOL_BIN" -v 2>/dev/null | grep -q "$REQ_HCXDUMPTOOL_VER_STR"; then
-        printf "${RED}Error: hcxdumptool-custom v%s or newer is required.${NC}\n" "$REQ_HCXDUMPTOOL_VER_STR"
-        error=1
+        printf "%b\n" "${RED}Error: hcxdumptool not found at %s${NC}" "$HCXDUMPTOOL_BIN"; error=1
+    else
+        local version_string
+        version_string=$(hcxdumptool -v 2>/dev/null)
+        case "$version_string" in
+            *6.3.5*|*v21.02.0*)
+                ;;
+            *)
+                printf "%b\n" "${RED}Error: hcxdumptool v6.3.5 or v21.02.0 is required.${NC}"
+                error=1
+                ;;
+        esac
     fi
-
+    
     if [ "$error" -eq 1 ]; then
-        printf "${RED}Dependency check failed. Please resolve the issues.${NC}\n"
-        exit 1
+        printf "%b\n" "${RED}Dependency check failed. Please resolve the issues.${NC}"; exit 1
     fi
     printf "${GREEN}Dependencies verified successfully.${NC}\n"
 }
@@ -374,78 +498,73 @@ start_capture() {
     local output_file="$1"
     local duration="$2"
     local HCX_CMD="$HCXDUMPTOOL_BIN -i $INTERFACE"
+    LAST_CAPTURE_FILE="$output_file"
 
     if [ "$SURVEY_MODE" -ne 1 ]; then
-        if [ -z "$output_file" ]; then printf "${RED}Internal Error: Output file not specified.${NC}\n" >&2; return 1; fi
         HCX_CMD="$HCX_CMD -w \"$output_file\""
     fi
-
     if [ -n "$CHANNELS" ]; then
         HCX_CMD="$HCX_CMD -c $CHANNELS"
     else
         HCX_CMD="$HCX_CMD -F"
     fi
-
     if [ -n "$STAY_TIME" ]; then
         HCX_CMD="$HCX_CMD -t $STAY_TIME"
     fi
-
+    if [ -n "$BPF_FILE" ]; then
+        if [ -f "$BPF_FILE" ]; then
+            HCX_CMD="$HCX_CMD --bpf=\"$BPF_FILE\""
+        else
+            printf "${YELLOW}Warning: BPF file '%s' not found. Ignoring filter.${NC}\n" "$BPF_FILE"
+        fi
+    fi
     if [ "$ENABLE_GPS" -eq 1 ]; then
         HCX_CMD="$HCX_CMD --gpsd"
     fi
-    
     if [ "$SURVEY_MODE" -eq 1 ]; then
-        HCX_CMD="$HCX_CMD --rcascan=a"
+        HCX_CMD="$HCX_CMD --rcascan=$SURVEY_SCAN_MODE"
     fi
-
     if [ "$PASSIVE_MODE" -eq 1 ]; then
         HCX_CMD="$HCX_CMD --disable_disassociation"
     fi
-
-    if [ "$TIME_WARP_ATTACK" -eq 1 ]; then
-        HCX_CMD="$HCX_CMD --ftc"
+    if [ "$ACK_FRAMES" -eq 1 ]; then
+        HCX_CMD="$HCX_CMD -A"
     fi
+    if [ -n "$TIMEOUT" ]; then HCX_CMD="$HCX_CMD --tot=$TIMEOUT"; fi
+    if [ -n "$WATCHDOG_MAX" ]; then HCX_CMD="$HCX_CMD --watchdogmax=$WATCHDOG_MAX"; fi
+    if [ -n "$ERROR_MAX" ]; then HCX_CMD="$HCX_CMD --errormax=$ERROR_MAX"; fi
+    if [ -n "$EXIT_ON_EAPOL" ]; then HCX_CMD="$HCX_CMD --exitoneapol=$EXIT_ON_EAPOL"; fi
+    if [ -n "$ASSOCIATION_MAX" ]; then HCX_CMD="$HCX_CMD --associationmax=$ASSOCIATION_MAX"; fi
+    if [ -n "$M2_MAX" ]; then HCX_CMD="$HCX_CMD --m2max=$M2_MAX"; fi
     
-    # Add any special mode options from the command line
     if [ -n "$HCXD_OPTS" ]; then
         HCX_CMD="$HCX_CMD $HCXD_OPTS"
     fi
 
-    # FIX: Auto-enable RDS for a better user experience if no other RDS mode is set.
-    # We check if the HCXD_OPTS string already contains "--rds".
     case "$HCXD_OPTS" in
-        *--rds*) ;; # Do nothing if RDS is already set by the user
-        *)
-            # Only add default RDS if not in survey or passive mode
-            if [ "$SURVEY_MODE" -eq 0 ] && [ "$PASSIVE_MODE" -eq 0 ]; then
-                HCX_CMD="$HCX_CMD --rds=3"
-            fi
-            ;;
+        *--rds*) ;;
+        *) if [ "$SURVEY_MODE" -eq 0 ] && [ "$PASSIVE_MODE" -eq 0 ]; then HCX_CMD="$HCX_CMD --rds=3"; fi ;;
     esac
 
     log_message "Executing: $HCX_CMD"
-    
     eval "$HCX_CMD" &
     HCX_PID=$!
-    
     if [ -n "$duration" ]; then
         sleep "$duration"
         if kill -0 "$HCX_PID" 2>/dev/null; then kill "$HCX_PID"; fi
     fi
-    
     wait "$HCX_PID" 2>/dev/null
 }
 
 cleanup() {
-    trap '' INT TERM # Prevent the trap from running again
+    trap '' INT TERM
     printf "\n${CYAN}--- Cleaning up ---${NC}\n"
 
-    # Kill the background hcxdumptool process
-    if [ "$HCX_PID" -ne 0 ] && kill -0 "$HCX_PID" 2>/dev/null; then 
-        kill "$HCX_PID" 2>/dev/null
+    if [ "$HCX_PID" -ne 0 ] && kill -0 "$HCX_PID" 2>/dev/null; then
+        kill "$HCX_PID"
+        wait "$HCX_PID" 2>/dev/null
     fi
     
-    # Calculate and display the total runtime
     if [ "$START_TIME" -ne 0 ]; then
         local END_TIME
         END_TIME=$(date +%s)
@@ -455,20 +574,31 @@ cleanup() {
         printf "  - Total session runtime: %sm %ss.\n" "$MINUTES" "$SECONDS"
     fi
 
-    # Restore the wireless interface to its original state
+    # --- FIX: Added automatic analysis step ---
+    if [ "$SURVEY_MODE" -ne 1 ]; then
+        # Check if the analyzer exists and the capture file was created and has data
+        if [ -x "$ANALYZER_BIN" ] && [ -n "$LAST_CAPTURE_FILE" ] && [ -s "$LAST_CAPTURE_FILE" ]; then
+            printf "\n${CYAN}--- Analyzing Session File ---${NC}\n"
+            printf "Running analysis on: %s\n" "$LAST_CAPTURE_FILE"
+            "$ANALYZER_BIN" "$LAST_CAPTURE_FILE"
+        elif [ -n "$LAST_CAPTURE_FILE" ]; then
+            printf "\n${YELLOW}Capture complete. File saved to: %s${NC}\n" "$LAST_CAPTURE_FILE"
+            printf "${YELLOW}Analyzer script not found or capture file empty. Skipping analysis.${NC}\n"
+        fi
+    fi
+
+    # --- FIX: This check now works because RESTORE_INTERFACE is initialized ---
     if [ "$RESTORE_INTERFACE" -eq 1 ]; then
-        printf "${CYAN}Setting interface '%s' to managed mode...${NC}\n" "$INTERFACE"
+        printf "${CYAN}Restoring interface '%s' to managed mode...${NC}\n" "$INTERFACE"
         ip link set "$INTERFACE" down 2>/dev/null
         iw "$INTERFACE" set type managed 2>/dev/null
         ip link set "$INTERFACE" up 2>/dev/null
     fi
 
-    # Remove temporary files
     rm -f "$TEMP_FILE" 2>/dev/null
     log_message "Cleanup finished due to user interrupt."
 
-    # FIX: Exit with the standard status code for Ctrl+C (SIGINT).
-    # This forces a clean exit and prevents the script from continuing.
+    # Exit with the standard status code for Ctrl+C (SIGINT)
     exit 130
 }
 trap cleanup INT TERM
@@ -490,7 +620,7 @@ interactive_mode() {
     read -r mode_choice
 
     case "$mode_choice" in
-        1) ;; # Default hunt mode
+        1) ;;
         2) PASSIVE_MODE=1;;
         3) HCXD_OPTS="$HCXD_OPTS --associationmax=0";;
         4) HCXD_OPTS="$HCXD_OPTS --m2max=0";;
@@ -519,23 +649,11 @@ run_adaptive_hunt() {
     kill "$scan_pid" >/dev/null 2>&1
     wait "$scan_pid" 2>/dev/null
 
-    if [ ! -s "$TEMP_SCAN_FILE" ]; then
-        printf "%b\n" "${RED}No networks were found during the survey.${NC}"
-        return 1
-    fi
+    if [ ! -s "$TEMP_SCAN_FILE" ]; then printf "%b\n" "${RED}No networks were found during the survey.${NC}"; return 1; fi
     
-    awk '
-        /->/ {
-            bssid = $1; essid = $3; channel = $4;
-            key = bssid"|"essid"|"channel;
-            count[key]++;
-        }
-        END { for (key in count) { print key; } }' "$TEMP_SCAN_FILE" > "$TARGET_LIST_FILE"
+    awk '/->/ { bssid = $1; essid = $3; channel = $4; key = bssid"|"essid"|"channel; count[key]++; } END { for (key in count) { print key; } }' "$TEMP_SCAN_FILE" > "$TARGET_LIST_FILE"
 
-    if [ ! -s "$TARGET_LIST_FILE" ]; then
-        printf "%b\n" "${YELLOW}No scannable networks found.${NC}"
-        return 1
-    fi
+    if [ ! -s "$TARGET_LIST_FILE" ]; then printf "%b\n" "${YELLOW}No scannable networks found.${NC}"; return 1; fi
     
     printf "\n%b\n" "${CYAN}Please select a target network to attack:${NC}"
     local menu_line_count
@@ -551,9 +669,7 @@ run_adaptive_hunt() {
     case "$choice" in
         ''|*[!0-9]*) printf "%b\n" "${RED}Invalid choice. Aborting.${NC}"; return 1;;
     esac
-    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_line_count" ]; then
-        printf "%b\n" "${RED}Invalid choice. Aborting.${NC}"; return 1
-    fi
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "$menu_line_count" ]; then printf "%b\n" "${RED}Invalid choice. Aborting.${NC}"; return 1; fi
     
     local selected_target
     selected_target=$(sed -n "${choice}p" "$TARGET_LIST_FILE")
@@ -575,7 +691,6 @@ run_adaptive_hunt() {
         return 1
     fi
     
-    # NOTE: This attack targets the entire AP, as no client-specific deauth flag is available.
     local CAPTURE_CMD="$HCXDUMPTOOL_BIN -i $INTERFACE -w \"$output_file\" -c $target_channel --bpf=\"$temp_bpf_file\""
 
     log_message "Executing Adaptive Hunt: $CAPTURE_CMD"
@@ -610,9 +725,7 @@ run_main_workflow() {
             local ts
             ts=$(date +%Y%m%d-%H%M%S)
             local filename_base="session"
-            if [ -n "$sanitized_tag" ]; then
-                filename_base="${filename_base}-${sanitized_tag}"
-            fi
+            if [ -n "$sanitized_tag" ]; then filename_base="${filename_base}-${sanitized_tag}"; fi
             
             local loop_output_file="${OUTPUT_DIR}/${filename_base}-wardrive-${ts}.pcapng"
             if [ "$QUIET" -eq 0 ]; then printf "\n${YELLOW}Starting loop #%s... (File: %s)${NC}\n" "$loop_count" "$(basename "$loop_output_file")"; fi
@@ -624,9 +737,7 @@ run_main_workflow() {
         local ts
         ts=$(date +%Y%m%d-%H%M%S)
         local filename_base="session"
-        if [ -n "$sanitized_tag" ]; then
-            filename_base="${filename_base}-${sanitized_tag}"
-        fi
+        if [ -n "$sanitized_tag" ]; then filename_base="${filename_base}-${sanitized_tag}"; fi
         
         local output_file="${OUTPUT_DIR}/${filename_base}-single-${ts}.pcapng"
         log_message "Starting single capture with tag: '${sanitized_tag}'"
@@ -640,7 +751,6 @@ run_main_workflow() {
 #==============================================================================
 
 main() {
-    # If run without arguments, show usage.
     if [ -z "$1" ]; then
         usage
         exit 0
@@ -660,19 +770,49 @@ main() {
             -i|--interface) INTERFACE="$2"; shift 2;;
             -c|--channels) CHANNELS="$2"; shift 2;;
             -d|--duration) DURATION="$2"; shift 2;;
-            -F) CHANNELS=""; shift;; # -F overrides -c
+            -F) CHANNELS=""; shift;;
+            --filter-file) FILTER_FILE="$2"; shift 2;;
+            --filter-mode)
+                FILTER_MODE="$2"
+                if [ "$FILTER_MODE" != "whitelist" ] && [ "$FILTER_MODE" != "blacklist" ]; then
+                    printf "${RED}Error: Invalid filter mode. Use 'whitelist' or 'blacklist'.${NC}\n" >&2
+                    exit 1
+                fi
+                shift 2;;
+            --oui-file) OUI_FILE="$2"; shift 2;;
+            --oui-filter-mode)
+                OUI_FILTER_MODE="$2"
+                if [ "$OUI_FILTER_MODE" != "whitelist" ] && [ "$OUI_FILTER_MODE" != "blacklist" ]; then
+                     printf "${RED}Error: Invalid OUI filter mode. Use 'whitelist' or 'blacklist'.${NC}\n" >&2
+                     exit 1
+                fi
+                shift 2;;
             -t|--stay-time) STAY_TIME="$2"; shift 2;;
             --enable-gps) ENABLE_GPS=1; shift;;
             --hcxd-opts) HCXD_OPTS="$HCXD_OPTS $2"; shift 2;;
             --wardriving-loop) WARDRIVING_LOOP="$2"; shift 2;;
-            # Attack Modes
             --hunt-adaptive) ADAPTIVE_HUNT=1; shift;;
             --passive) PASSIVE_MODE=1; shift;;
-            --survey) SURVEY_MODE=1; shift;;
+            --survey)
+                SURVEY_MODE=1
+                case "$2" in
+                    "p") SURVEY_SCAN_MODE="p"; shift 2;;
+                    "a") SURVEY_SCAN_MODE="a"; shift 2;;
+                    ""|--*) shift;; # No argument provided, use default 'a'
+                    *) printf "${RED}Error: Invalid survey mode '%s'. Use 'a' or 'p'.${NC}\n" "$2" >&2; exit 1;;
+                esac
+                ;;
             --client-only-hunt) HCXD_OPTS="$HCXD_OPTS --associationmax=0"; shift;;
             --pmkid-priority-hunt) HCXD_OPTS="$HCXD_OPTS --m2max=0"; shift;;
             --time-warp-attack) HCXD_OPTS="$HCXD_OPTS --ftc"; shift;;
+            --ack-frames) ACK_FRAMES=1; shift;;
             --rds) HCXD_OPTS="$HCXD_OPTS --rds=$2"; shift 2;;
+            --timeout) TIMEOUT="$2"; shift 2;;
+            --watchdog-max) WATCHDOG_MAX="$2"; shift 2;;
+            --error-max) ERROR_MAX="$2"; shift 2;;
+            --exit-on-eapol) EXIT_ON_EAPOL="$2"; shift 2;;
+            --association-max) ASSOCIATION_MAX="$2"; shift 2;;
+            --m2-max) M2_MAX="$2"; shift 2;;
             *)
                 printf "${RED}Unknown option: '%s'${NC}\n" "$1" >&2
                 usage
@@ -685,7 +825,8 @@ main() {
     if [ -z "$QUIET" ]; then show_banner; fi
     
     dependency_check
-    
+    generate_bpf_from_mac_list
+    generate_bpf_from_oui_list
     if [ "$INTERACTIVE_MODE" -eq 1 ]; then
         interactive_mode
     fi
@@ -702,6 +843,4 @@ main() {
     run_main_workflow
 }
 
-# This is the final line of the script. It calls the main() function
-# and passes all the command-line arguments ($@) to it.
 main "$@"

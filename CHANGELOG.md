@@ -4,35 +4,6 @@ All notable changes to the WiFi Pineapple HCX Toolkit will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [8.0.0 "Leviathan"] - 2025-07-27
-
-### Added
-- **Strategic Recommendation Engine**: (`--mode recommend`) The analyzer now acts as a decision-support system, analyzing captures to suggest the most effective subsequent attack vectors.
-- **Automated C2 Callbacks**: The analyzer can now send real-time push notifications via `ntfy` or `Discord` the moment a remote cracking job is successful.
-- **Situational Awareness Dashboard**: (`--utility generate-dashboard`) A new utility that generates a single, self-contained HTML report fusing all collected intelligence (cracked PSKs, networks, PII, GPS tracks) into a professional dashboard.
-- **Adaptive Deauthentication**: (`--hunt-adaptive`) A new surgical attack mode in the launcher that performs reconnaissance and targets only active clients for deauthentication, maximizing success and minimizing network noise.
-- **Chainable Job Queue**: (`--post-job`) The launcher can now automatically trigger the analyzer with specified arguments upon capture completion, enabling a "fire-and-forget" workflow.
-- **Credential Reuse Analysis**: (`--utility find-reuse-targets`) A new analyzer utility that cross-references cracked passwords against all uncracked networks with a matching ESSID, identifying prime targets for lateral movement.
-- **Historical Trend Analysis**: (`--mode trends`) The analyzer can now query the database to report on long-term environmental changes, such as new devices, stale devices, and recent cracking activity.
-- **Turnkey Remote Setup Wizard**: (`--utility setup-remote`) An interactive wizard in the analyzer that automates the entire process of configuring a remote server, from SSH key exchange to dependency installation.
-- **Cloud Storage Sync**: (`--utility cloud-sync`) A new analyzer utility that integrates `rclone` to provide robust, two-way synchronization of captures and results with a configured cloud provider.
-- **Session Management & Tagging**: (`--tag`) The launcher can now embed a session tag into filenames, and the analyzer can filter its operations by this tag for organized, engagement-based analysis.
-- **Evasion & Anonymity**: (`--random-mac`) The launcher can now randomize the capture interface's MAC address before an operation and restore it upon completion.
-- **Expanded Remote Execution**: All new data-intensive analysis modes (`recommend`, `trends`, `find-reuse-targets`) have been made available for remote execution.
-
-### Changed
-- **Major Version Upgrade**: Version bumped from 7.1.0 to 8.0.0 and codenamed "Leviathan" to reflect the monumental leap in capabilities from a set of tools to an integrated offensive intelligence platform.
-- **Configuration (`hcxscript.conf`)**: The configuration file has been updated to support the new notification and cloud sync features.
-
-### Fixed
-- **POSIX Compliance**: All new features across both scripts have been meticulously hardened for strict POSIX compliance, resolving multiple `bash`-specific syntax errors to ensure flawless execution on the WiFi Pineapple's `ash` shell.
-- **Help Menu Documentation**: All previously undocumented arguments in `hcxdumptool-launcher.sh` have been added to the help menu, exposing the full capabilities of the tool.
-
-## [7.1.0] - 2025-07-26
-### Fixed
-- **POSIX Compliance**: Corrected a critical syntax error in `hcx-analyzer.sh` caused by non-POSIX `bash` features (process substitution and associative arrays). The `run_find_reuse_targets` function was rewritten to be fully compliant with the `ash` shell.
-- **Shebang Correction**: Ensured `hcx-analyzer.sh` uses `#!/bin/sh` to maintain compatibility with the target platform.
-
 ## [7.0.0] - 2025-07-25
 ### Added
 - **Performance Optimization Engine**: Added a powerful new feature to dramatically increase capture performance. Users can now apply a custom-tuned wireless configuration file specifically optimized for high-gain antennas and long-range capture on the WiFi Pineapple MKVII.
@@ -43,8 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Centralized Versioning System**: Major architectural change. Both `hcxdumptool-launcher.sh` and `hcx-analyzer.sh` no longer have hardcoded version numbers. They now dynamically read the toolkit's version directly from a single source of truth: `/etc/hcxtools/VERSION`. This streamlines version bumps and ensures perfect consistency across the entire toolkit.
 - **Code Refinement**: Cleaned up script initialization blocks to implement the new version-fetching logic, slightly improving startup performance and maintainability.
-
-## [7.0.0] - ?? -- Missing Data -- ??
 
 ## [5.0.0] - 2025-06-25
 ### Added
