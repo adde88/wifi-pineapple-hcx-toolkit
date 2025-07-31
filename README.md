@@ -1,7 +1,15 @@
 # WiFi Pineapple HCX Toolkit 🍍
-### v7.0.0 - "Hydra"
+### v8.0.7 - "Leviathan"
 
 An advanced automation framework for `hcxdumptool`, `hcxlabtool`, and `hcxtools` on the WiFi Pineapple MKVII and other OpenWrt devices. This toolkit transforms the powerful `hcx` binaries into a streamlined, user-friendly, and highly effective system for WiFi security assessments.
+
+---
+
+## ⚠️ Important Installation Notice
+
+The toolkit includes a `wireless.config` file designed for high-performance capture. **You MUST edit this file** with your own admin network name (SSID) and password before running the `--optimize-performance` command.
+
+Failure to edit this file first will result in you being **locked out** of your admin network.
 
 ---
 
@@ -9,22 +17,12 @@ An advanced automation framework for `hcxdumptool`, `hcxlabtool`, and `hcxtools`
 
 This toolkit was built to be a masterpiece of automation. It bridges the gap between the raw power of the HCX tools and the need for efficient, repeatable, and insightful analysis. It is designed for both novice users who need a guided experience and advanced users who require deep control and customization.
 
-## Major Features (v7.0.0 "Hydra" Update)
+## Major Features
 
 This toolkit is more than just a wrapper; it's a complete workflow engine.
 
-### **Remote Execution Engine: Offload to a Powerhouse**
-* **Remote Analysis (`--remote-mode`)**: Offload intensive analysis tasks from the resource-constrained Pineapple to a powerful desktop PC. The script handles securely transferring files, executing the analysis remotely, and bringing the results back.
-* **Remote Database (`--remote-mode mysql`)**: Log all findings directly to a remote MySQL/MariaDB server for centralized data management.
-* **Remote Cracking (`--utility remote_crack`)**: Seamlessly send captured hashes to a remote machine with Hashcat for GPU-accelerated cracking.
-
-### **Dual-Backend Attack System (--backend)**
-Choose the right engine for the job:
-* `hcxdumptool` **(Default)**: The classic, robust engine. Best for general-purpose, high-volume capture of handshakes and PMKIDs.
-* `hcxlabtool` **(Advanced)**: A surgical tool for specialized attacks. Use this for stealthy client-only attacks (`--client-only-hunt`), focusing exclusively on PMKIDs (`--pmkid-priority-hunt`), or advanced techniques like the Time-Warp attack.
-
 ### **System Performance Optimization Engine**
-* **`--optimize-performance`**: Applies a fine-tuned wireless configuration to the MKVII hardware, capable of boosting capture rates by over 450%.
+* **`--optimize-performance`**: Applies the fine-tuned `wireless.config` file to the MKVII hardware, capable of boosting capture rates. **Remember to edit the file with your credentials first!**
 * **`--restore-config`**: Instantly reverts to your original, backed-up wireless configuration.
 
 ### **The HCX Analyzer: Beyond Just Hashes**
@@ -50,9 +48,8 @@ The completely overhauled `hcx-analyzer.sh` script is the heart of the toolkit, 
 
 ## Requirements
 * A WiFi Pineapple MKVII or other OpenWrt-based device.
-* **hcxdumptool-custom**: v21.02.0 / 6.3.4 (specifically)
-* **hcxtools-custom**: v6.2.7 (specifically)
-* **hcxlabtool** (Optional, for advanced backend): v7.0 or newer.
+* **hcxdumptool-custom**: v21.02.0 / 6.3.5
+* **hcxtools-custom**: v6.2.7
 * `git` and `opkg` for installation.
 * root access.
 

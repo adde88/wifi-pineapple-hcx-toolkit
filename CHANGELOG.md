@@ -4,6 +4,16 @@ All notable changes to the WiFi Pineapple HCX Toolkit will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.0.7] - 2025-07-31
+### Added
+- **External Configuration File**: A default `wireless.config` file is now included in the repository, providing a tested, high-performance configuration out of the box.
+
+### Changed
+- **Refactored Performance Optimization**: The `--optimize-performance` feature no longer uses a hard-coded configuration within the script. It now applies the external `wireless.config` file, making it easier for users to view, modify, and manage their optimized settings.
+
+### Security
+- **Critical Installation Warning**: The installer now displays a prominent warning, instructing users to edit the default credentials in `wireless.config` *before* applying it. This prevents users from accidentally locking themselves out of their device's admin network.
+
 ## [7.0.0] - 2025-07-25
 ### Added
 - **Performance Optimization Engine**: Added a powerful new feature to dramatically increase capture performance. Users can now apply a custom-tuned wireless configuration file specifically optimized for high-gain antennas and long-range capture on the WiFi Pineapple MKVII.
