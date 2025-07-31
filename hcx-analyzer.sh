@@ -9,7 +9,7 @@
 #==============================================================================
 
 # --- Script Version ---
-ANALYZER_VERSION="8.0.6 \"Leviathan\""
+ANALYZER_VERSION="8.0.7 \"Leviathan\""
 
 # --- System & Path Configuration ---
 if [ -f "/etc/hcxtools/hcxscript.conf" ]; then

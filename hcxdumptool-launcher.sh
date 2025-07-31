@@ -1,9 +1,9 @@
 #!/bin/sh
 #
-# v8.0.6 "Leviathan"
+# v8.0.7 "Leviathan Refactored"
 # Author: Andreas Nilsen
 # Github: https://www.github.com/ZerBea/hcxtools
-# Patched by Gemini for POSIX compliance and cleanup-analysis functionality.
+# Refactored to use an external wireless config file.
 #
 # This script is designed to work with the custom packages from:
 # https://github.com/adde88/openwrt-useful-tools
@@ -22,7 +22,7 @@ readonly INSTALL_BIN="/usr/bin/hcxdumptool-launcher"
 readonly ANALYZER_BIN="/usr/bin/hcx-analyzer.sh"
 readonly UPDATE_URL="https://raw.githubusercontent.com/adde88/wifi-pineapple-hcx-toolkit/main/hcxdumptool-launcher.sh"
 readonly VERSION_FILE="$INSTALL_DIR/VERSION"
-readonly WIRELESS_CONFIG_OPTIMIZED="$INSTALL_DIR/wireless.optimized"
+# The backup file for the original wireless configuration.
 readonly WIRELESS_CONFIG_BACKUP="/etc/config/wireless.hcx-backup"
 
 # --- Tool Binaries ---
@@ -32,7 +32,7 @@ readonly HCXDUMPTOOL_BIN="/usr/sbin/hcxdumptool"
 if [ -f "$VERSION_FILE" ]; then
     SCRIPT_VERSION=$(cat "$VERSION_FILE")
 else
-    SCRIPT_VERSION="8.0.6"
+    SCRIPT_VERSION="8.0.7"
 fi
 
 #--- Tool Requirements ---#
@@ -144,7 +144,7 @@ usage() {
 }
 
 install_script() {
-    printf "%b\n" "${BLUE}=== Installing HCX Toolkit v8.0.5 ===${NC}"
+    printf "%b\n" "${BLUE}=== Installing HCX Toolkit v%s ===${NC}" "$SCRIPT_VERSION"
     
     if ! command -v "$HCXDUMPTOOL_BIN" >/dev/null 2>&1; then printf "%b\n" "${RED}Required 'hcxdumptool' not found at %s. Aborting.${NC}" "$HCXDUMPTOOL_BIN"; exit 1; fi
     if ! command -v hcxpcapngtool >/dev/null 2>&1; then printf "%b\n" "${RED}Core 'hcxtools' not found. Aborting.${NC}"; exit 1; fi
@@ -160,19 +160,32 @@ install_script() {
         cp "$(dirname "$0")/hcx-analyzer.sh" "$ANALYZER_BIN" && chmod +x "$ANALYZER_BIN"
     fi
     
-    echo "8.0.5" > "$VERSION_FILE"
+    echo "$SCRIPT_VERSION" > "$VERSION_FILE"
     touch "$LOG_FILE"
     
     printf "%b\n" "${GREEN}Installation complete!${NC}"
     printf "\n"
-    printf "%b\n" "${YELLOW}####################### POST-INSTALL ACTION REQUIRED #######################${NC}"
-    printf "%b\n" "${CYAN}This toolkit includes a high-performance wireless configuration that can${NC}"
-    printf "%b\n" "${CYAN}significantly increase capture rates.${NC}\n"
-    printf "To activate it, run the following command:\n"
-    printf "%b\n" "${GREEN}hcxdumptool-launcher --optimize-performance${NC}\n"
-    printf "%b\n" "${RED}WARNING:${NC} This will replace your current wireless settings. A backup will"
-    printf "%b\n" "be created, which you can restore with --restore-config.${NC}"
-    printf "%b\n" "${YELLOW}############################################################################${NC}"
+    # --- IMPROVED POST-INSTALLATION WARNING ---
+    printf "%b\n" "${YELLOW}#################### CRITICAL POST-INSTALL ACTION REQUIRED ####################${NC}"
+    printf "%b\n" "${CYAN}This toolkit includes a 'wireless.config' file for high-performance capture.${NC}"
+    printf "\n"
+    printf "%b\n" "${RED}!!! IMPORTANT WARNING !!!${NC}"
+    printf "%b\n" "${YELLOW}The provided 'wireless.config' contains pre-configured settings, including${NC}"
+    printf "%b\n" "${YELLOW}an SSID ('MK7-ADMIN') and a default password ('option key ...').${NC}"
+    printf "\n"
+    printf "%b\n" "${RED}You MUST edit the 'wireless.config' file and set your own password${NC}"
+    printf "%b\n" "${RED}before applying it. Failure to do so will prevent you from connecting${NC}"
+    printf "%b\n" "${RED}to your device's admin network!${NC}"
+    printf "\n"
+    printf "%b\n" "${CYAN}1. Edit the 'wireless.config' file with your desired admin password.${NC}"
+    printf "%b\n" "${CYAN}2. Apply the configuration by running the following command:${NC}"
+    printf "%b\n" "   ${GREEN}hcxdumptool-launcher --optimize-performance${NC}"
+    printf "\n"
+    printf "%b\n" "${CYAN}A backup of your original settings will be created at:${NC}"
+    printf "%b\n" "   ${CYAN}/etc/config/wireless.hcx-backup${NC}"
+    printf "%b\n" "${CYAN}You can restore it anytime by running:${NC}"
+    printf "%b\n" "   ${GREEN}hcxdumptool-launcher --restore-config${NC}"
+    printf "%b\n" "${YELLOW}###############################################################################${NC}"
 }
 
 uninstall_script() {
@@ -244,73 +257,47 @@ update_script() {
     fi
 }
 
+#
+# REFACTORED FUNCTION
+# This function now copies an external config file instead of using a hard-coded one.
+#
 optimize_performance() {
     printf "%b\n" "${CYAN}--- Applying High-Performance Wireless Configuration ---${NC}"
-    if [ ! -f /etc/config/wireless ]; then
-        printf "%b\n" "${RED}Error: Wireless configuration file not found at /etc/config/wireless.${NC}"
+    
+    # The source file is expected to be in the same directory as the script.
+    # Its name must be 'wireless.config'.
+    local source_config_file
+    source_config_file="$(dirname "$0")/wireless.config"
+
+    # First, check if the source configuration file actually exists.
+    if [ ! -f "$source_config_file" ]; then
+        printf "%b\n" "${RED}Error: Optimized configuration file not found at:${NC}"
+        printf "%s\n" "$source_config_file"
+        printf "%b\n" "${YELLOW}Please ensure 'wireless.config' is in the same directory as the launcher script.${NC}"
         exit 1
     fi
 
+    # Then, check if the target system file exists.
+    if [ ! -f /etc/config/wireless ]; then
+        printf "%b\n" "${RED}Error: System wireless configuration not found at /etc/config/wireless.${NC}"
+        exit 1
+    fi
+
+    # Backup the current configuration before overwriting it.
     if [ -f "$WIRELESS_CONFIG_BACKUP" ]; then
-        printf "%b\n" "${YELLOW}A backup already exists. Overwriting it.${NC}"
+        printf "%b\n" "${YELLOW}A backup already exists at %s. Overwriting it.${NC}" "$WIRELESS_CONFIG_BACKUP"
     else
         printf "Backing up current wireless configuration to %s...\n" "$WIRELESS_CONFIG_BACKUP"
     fi
     cp /etc/config/wireless "$WIRELESS_CONFIG_BACKUP"
 
-    printf "Writing optimized configuration...\n"
-    cat > "$WIRELESS_CONFIG_OPTIMIZED" << 'EOF'
-config wifi-device 'radio0'
-        option type 'mac80211'
-        option path 'platform/soc/a000000.wifi'
-        option channel 'auto'
-        option band '2g'
-        option htmode 'HT40'
-        option disabled '0'
-        option country 'US'
-        option noscan '1'
-        option txpower '30'
-
-config wifi-iface 'default_radio0'
-        option device 'radio0'
-        option network 'lan'
-        option mode 'ap'
-        option ssid 'Pineapple'
-        option encryption 'none'
-
-config wifi-device 'radio1'
-        option type 'mac80211'
-        option path 'platform/soc/a800000.wifi'
-        option channel 'auto'
-        option band '5g'
-        option htmode 'VHT80'
-        option disabled '0'
-        option country 'US'
-        option noscan '1'
-        option txpower '30'
-
-config wifi-iface 'default_radio1'
-        option device 'radio1'
-        option network 'lan'
-        option mode 'ap'
-        option ssid 'Pineapple_5G'
-        option encryption 'none'
-
-config wifi-device 'radio2'
-        option type 'mac80211'
-        option path 'pci0000:00/0000:00:00.0/usb1/1-1/1-1:1.0'
-        option channel 'auto'
-        option band '2g'
-        option htmode 'HT40'
-        option country 'US'
-        option disabled '0'
-        option noscan '1'
-EOF
-
-    cp "$WIRELESS_CONFIG_OPTIMIZED" /etc/config/wireless
+    # Copy the new optimized configuration into place.
+    printf "Copying optimized configuration from %s...\n" "$source_config_file"
+    cp "$source_config_file" /etc/config/wireless
 
     printf "%b\n" "${GREEN}Performance configuration applied successfully.${NC}"
     printf "Reloading wireless services to apply changes...\n"
+    # This command reloads the wireless configuration on OpenWrt.
     wifi reload
     printf "%b\n" "${CYAN}To restore your original settings, run: hcxdumptool-launcher --restore-config${NC}"
 }
@@ -323,12 +310,13 @@ restore_performance_config() {
     fi
 
     printf "Restoring from %s...\n" "$WIRELESS_CONFIG_BACKUP"
+    # Use mv to both restore the file and remove the backup in one step.
     mv "$WIRELESS_CONFIG_BACKUP" /etc/config/wireless
 
     printf "%b\n" "${GREEN}Original configuration restored successfully.${NC}"
     printf "Reloading wireless services to apply changes...\n"
     wifi reload
-}
+}   
 
 load_profile() {
     local profile_name="$1"
