@@ -1,7 +1,7 @@
 # WiFi Pineapple HCX Toolkit 🍍
 ### v8.0.7 - "Leviathan"
 
-An advanced automation framework for `hcxdumptool`, `hcxlabtool`, and `hcxtools` on the WiFi Pineapple MKVII and other OpenWrt devices. This toolkit transforms the powerful `hcx` binaries into a streamlined, user-friendly, and highly effective system for WiFi security assessments.
+An advanced automation framework for `hcxdumptool`, and `hcxtools` on the WiFi Pineapple MKVII and other OpenWrt devices. This toolkit transforms the powerful `hcx` binaries into a streamlined, user-friendly, and highly effective system for WiFi security assessments.
 
 ---
 
