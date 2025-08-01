@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# v8.0.7 "Leviathan Refactored"
+# v8.0.7 "Leviathan"
 # Author: Andreas Nilsen
 # Github: https://www.github.com/ZerBea/hcxtools
 # Refactored to use an external wireless config file.

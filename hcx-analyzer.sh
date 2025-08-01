@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# HCX Advanced Analyzer - v8.0.6 "Leviathan"
+# HCX Advanced Analyzer - v8.0.7 "Leviathan"
 #
 # (C) 2025 Andreas Nilsen. All rights reserved.
 
