@@ -55,6 +55,6 @@ The completely overhauled `hcx-analyzer.sh` script is the heart of the toolkit, 
 
 ### Support This Project
 If you find this project helpful, please consider supporting its continued development:
-- **Bitcoin**: `bc1qj85mvdr657nkzef4gppl9xy8eqerqga3suaqc3`
+- **Bitcoin**: `bc1qnamkw2g3n9w4v5lejn8rlw000g2mqpdca9vk04`
 
 *Your support helps keep this project maintained and improved. Thank you!*
